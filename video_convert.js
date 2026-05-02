@@ -1,7 +1,7 @@
 const ffmpeg = require('fluent-ffmpeg');
 const fs = require('fs');
 const path = require('path');
-
+const { execSync } = require('child_process');
 /**
  * Help / Usage Instructions
  */
@@ -17,9 +17,10 @@ Arguments:
   output_dir   Path where converted MP4 files will be saved.
 
 Logic:
-  - Resolution >= 720p: HEVC (x265), CRF 20, Preset Slow, Audio Copy.
-  - Resolution < 720p:  AVC (x264), CRF 18, Preset Slow, Audio Copy.
-  - No Audio: Automatically detected and handled (strips audio).
+  - Resolution >= 720p: HEVC (x265), CRF 20, Preset Slow, Audio Copy/Encode.
+  - Resolution < 720p:  AVC (x264), CRF 18, Preset Slow, Audio Copy/Encode.
+  - Audio: Copied if compatible (AAC, MP3, AC3, EAC3, ALAC), otherwise encoded to AAC 128k. Stripped if missing.
+  - Metadata: Preserves EXIF metadata and original creation/modification dates.
     `);
     process.exit(0);
 }
@@ -67,6 +68,8 @@ function convertVideo(filePath, fileName) {
             return resolve();
         }
 
+        const stat = fs.statSync(filePath);
+
         ffmpeg.ffprobe(filePath, (err, metadata) => {
             if (err) return reject(err);
 
@@ -90,16 +93,44 @@ function convertVideo(filePath, fileName) {
 
             // Smart Audio Handling
             if (audioStream) {
-                command.audioCodec('copy');
+                const codec = audioStream.codec_name;
+                const compatibleCodecs = ['aac', 'mp3', 'ac3', 'eac3', 'alac'];
+                if (compatibleCodecs.includes(codec)) {
+                    command.audioCodec('copy');
+                } else {
+                    command.audioCodec('aac').audioBitrate('128k');
+                }
             } else {
                 command.noAudio();
             }
+
+            // Preserve EXIF metadata
+            command.outputOptions(['-map_metadata 0', '-movflags use_metadata_tags']);
 
             command
                 .format('mp4')
                 .on('progress', (p) => process.stdout.write(`Progress: ${Math.floor(p.percent)}% \r`))
                 .on('end', () => { 
                     fs.renameSync(tempFilePath, outputFilePath);
+
+                    // Restore modification time
+                    fs.utimesSync(outputFilePath, stat.atime, stat.mtime);
+
+                    // Restore creation date on macOS
+                    try {
+                        const d = stat.birthtime || stat.mtime;
+                        const mm = String(d.getMonth() + 1).padStart(2, '0');
+                        const dd = String(d.getDate()).padStart(2, '0');
+                        const yyyy = d.getFullYear();
+                        const HH = String(d.getHours()).padStart(2, '0');
+                        const MM = String(d.getMinutes()).padStart(2, '0');
+                        const SS = String(d.getSeconds()).padStart(2, '0');
+                        const dateStr = `${mm}/${dd}/${yyyy} ${HH}:${MM}:${SS}`;
+                        execSync(`SetFile -d "${dateStr}" "${outputFilePath}"`);
+                    } catch (err) {
+                        // Ignore if SetFile is not available
+                    }
+
                     console.log(`Done: ${fileName}          `); 
                     resolve(); 
                 })
