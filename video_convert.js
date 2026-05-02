@@ -60,6 +60,12 @@ async function processVideos(dir) {
 function convertVideo(filePath, fileName) {
     return new Promise((resolve, reject) => {
         const outputFilePath = path.join(outputDir, path.parse(fileName).name + '.mp4');
+        const tempFilePath = outputFilePath + '.tmp';
+
+        if (fs.existsSync(outputFilePath)) {
+            console.log(`Skipping (already converted): ${fileName}`);
+            return resolve();
+        }
 
         ffmpeg.ffprobe(filePath, (err, metadata) => {
             if (err) return reject(err);
@@ -90,10 +96,21 @@ function convertVideo(filePath, fileName) {
             }
 
             command
+                .format('mp4')
                 .on('progress', (p) => process.stdout.write(`Progress: ${Math.floor(p.percent)}% \r`))
-                .on('end', () => { console.log(`Done: ${fileName}          `); resolve(); })
-                .on('error', (e) => { console.error(`Error: ${fileName} - ${e.message}`); resolve(); })
-                .save(outputFilePath);
+                .on('end', () => { 
+                    fs.renameSync(tempFilePath, outputFilePath);
+                    console.log(`Done: ${fileName}          `); 
+                    resolve(); 
+                })
+                .on('error', (e) => { 
+                    if (fs.existsSync(tempFilePath)) {
+                        try { fs.unlinkSync(tempFilePath); } catch (err) {}
+                    }
+                    console.error(`\nError: ${fileName} - ${e.message}`); 
+                    resolve(); 
+                })
+                .save(tempFilePath);
         });
     });
 }
