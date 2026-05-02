@@ -1,0 +1,11 @@
+{
+  "name": "video-converter-pro",
+  "version": "1.0.0",
+  "description": "Smart video converter for HEVC/AVC with metadata preservation",
+  "main": "convert.js",
+  "dependencies": {
+    "fluent-ffmpeg": "^2.1.2"
+  },
+  "author": "Diego",
+  "license": "MIT"
+}
