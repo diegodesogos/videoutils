@@ -44,14 +44,21 @@ if (!targetDir || (!minDuration && !minHeight)) {
 
 function getMetadata(filePath) {
     try {
-        const cmd = `ffprobe -v error -select_streams v:0 -show_entries format=duration -show_entries stream=width,height,codec_name -of default=noprint_wrappers=1:nokey=1 "${filePath}"`;
-        const output = execSync(cmd).toString().trim().split('\n');
+        const cmd = `ffprobe -v error -select_streams v:0 -show_entries format=duration:format_tags -show_entries stream=width,height,codec_name:stream_tags -of json "${filePath}"`;
+        const output = execSync(cmd).toString();
+        const data = JSON.parse(output);
+        
+        const stream = data.streams && data.streams[0] ? data.streams[0] : {};
+        const format = data.format || {};
+        
+        const allTags = { ...(format.tags || {}), ...(stream.tags || {}) };
         
         return {
-            codec: output[0],
-            width: parseInt(output[1]),
-            height: parseInt(output[2]),
-            duration: parseFloat(output[3])
+            codec: stream.codec_name,
+            width: parseInt(stream.width),
+            height: parseInt(stream.height),
+            duration: parseFloat(format.duration),
+            tags: allTags
         };
     } catch (err) {
         return null;
@@ -84,6 +91,13 @@ function processVideos() {
             foundCount++;
             console.log(`File: ${file}`);
             console.log(`  Codec: ${meta.codec} | Res: ${meta.width}x${meta.height} | Duration: ${(meta.duration / 60).toFixed(2)} mins`);
+            if (meta.tags && Object.keys(meta.tags).length > 0) {
+                console.log(`  Metadata:`);
+                for (const [key, value] of Object.entries(meta.tags)) {
+                    if (value.length > 150) continue; // Skip huge binary tags
+                    console.log(`    - ${key}: ${value}`);
+                }
+            }
             console.log('-----------------------------------------------------------------');
         }
     });

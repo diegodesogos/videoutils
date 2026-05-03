@@ -105,7 +105,31 @@ function convertVideo(filePath, fileName) {
             }
 
             // Preserve EXIF metadata
-            command.outputOptions(['-map_metadata 0', '-movflags use_metadata_tags']);
+            const metadataOptions = ['-map_metadata', '0', '-movflags', 'use_metadata_tags'];
+            
+            // Explicitly extract tags from format or video stream to preserve legacy metadata
+            let creationTime = null;
+            let make = null;
+            let model = null;
+
+            const formatTags = metadata.format && metadata.format.tags ? metadata.format.tags : {};
+            const streamTags = videoStream && videoStream.tags ? videoStream.tags : {};
+            
+            creationTime = formatTags.creation_time || streamTags.creation_time || streamTags.DateTime || streamTags['ExifIFD/DateTimeOriginal'];
+            make = formatTags.make || formatTags.Make || streamTags.make || streamTags.Make;
+            model = formatTags.model || formatTags.Model || streamTags.model || streamTags.Model;
+
+            if (creationTime) {
+                // Convert "YYYY:MM:DD HH:MM:SS" to "YYYY-MM-DDTHH:MM:SSZ" to avoid ffmpeg space-splitting errors
+                if (creationTime.match(/^\d{4}[:\-]\d{2}[:\-]\d{2}\s\d{2}:\d{2}:\d{2}$/)) {
+                    creationTime = creationTime.replace(/^(\d{4})[:\-](\d{2})[:\-](\d{2})\s(.*)$/, '$1-$2-$3T$4Z');
+                }
+                metadataOptions.push('-metadata', `creation_time=${creationTime}`);
+            }
+            if (make) metadataOptions.push('-metadata', `make="${make}"`);
+            if (model) metadataOptions.push('-metadata', `model="${model}"`);
+
+            command.outputOptions(metadataOptions);
 
             command
                 .format('mp4')
