@@ -116,6 +116,13 @@ function convertVideo(filePath, fileName) {
             const streamTags = videoStream && videoStream.tags ? videoStream.tags : {};
             
             creationTime = formatTags.creation_time || streamTags.creation_time || streamTags.DateTime || streamTags['ExifIFD/DateTimeOriginal'];
+            
+            // Fallback to filesystem creation/modification date if no internal EXIF exists
+            if (!creationTime) {
+                const d = stat.birthtime || stat.mtime;
+                if (d) creationTime = d.toISOString();
+            }
+
             make = formatTags.make || formatTags.Make || streamTags.make || streamTags.Make;
             model = formatTags.model || formatTags.Model || streamTags.model || streamTags.Model;
 

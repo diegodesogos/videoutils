@@ -81,8 +81,11 @@ function processVideos() {
     files.forEach(file => {
         if (!videoExtensions.includes(path.extname(file).toLowerCase())) return;
 
-        const meta = getMetadata(path.join(absolutePath, file));
+        const filePath = path.join(absolutePath, file);
+        const meta = getMetadata(filePath);
         if (!meta) return;
+
+        const stat = fs.statSync(filePath);
 
         const matchesDuration = minDuration ? (meta.duration / 60) >= parseFloat(minDuration) : true;
         const matchesHeight = minHeight ? meta.height >= parseInt(minHeight) : true;
@@ -91,6 +94,9 @@ function processVideos() {
             foundCount++;
             console.log(`File: ${file}`);
             console.log(`  Codec: ${meta.codec} | Res: ${meta.width}x${meta.height} | Duration: ${(meta.duration / 60).toFixed(2)} mins`);
+            
+            console.log(`  FS Created : ${stat.birthtime.toISOString()}`);
+            console.log(`  FS Modified: ${stat.mtime.toISOString()}`);
             if (meta.tags && Object.keys(meta.tags).length > 0) {
                 console.log(`  Metadata:`);
                 for (const [key, value] of Object.entries(meta.tags)) {
