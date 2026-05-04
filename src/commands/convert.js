@@ -21,25 +21,35 @@ function convertCommand(sourceDir, outputDir, options = {}) {
     const files = fs.readdirSync(src).filter(isVideoFile);
     console.log(`Scanning: ${src}`);
 
+    let processedCount = 0;
+    let convertedCount = 0;
+    let skippedCount = 0;
+
     async function convertVideo(file) {
         return new Promise((resolve, reject) => {
+            processedCount++;
             const filePath = path.join(src, file);
             const outputFilePath = getOutputFilePath(file, out);
             const tempFilePath = getTempFilePath(outputFilePath);
 
             if (fs.existsSync(outputFilePath)) {
                 console.log(`Skipping (already converted): ${file}`);
+                skippedCount++;
                 return resolve();
             }
 
             if (dryRun) {
                 console.log(`[DRY RUN] Would convert: ${file} -> ${outputFilePath}`);
+                convertedCount++;
                 return resolve();
             }
 
             const stat = fs.statSync(filePath);
             const meta = getMetadata(filePath);
-            if (!meta) return reject(new Error("Failed to get metadata"));
+            if (!meta) {
+                console.error(`  Error: Failed to get metadata for ${file}`);
+                return resolve();
+            }
 
             const videoStream = meta.rawStreams.find(s => s.codec_type === 'video');
             const audioStream = meta.rawStreams.find(s => s.codec_type === 'audio');
@@ -96,6 +106,7 @@ function convertCommand(sourceDir, outputDir, options = {}) {
                     fs.renameSync(tempFilePath, outputFilePath);
                     restoreFileDates(outputFilePath, stat.atime, stat.mtime, stat.birthtime);
                     console.log(`Done: ${file}          `);
+                    convertedCount++;
                     resolve();
                 })
                 .save(tempFilePath);
@@ -106,7 +117,11 @@ function convertCommand(sourceDir, outputDir, options = {}) {
         for (const file of files) {
             await convertVideo(file);
         }
-        console.log('\nConversion batch finished.');
+        console.log(`\nConversion Summary:`);
+        console.log(`- Files processed: ${processedCount}`);
+        console.log(`- Files skipped (already exist): ${skippedCount}`);
+        console.log(`- Files converted (or would be): ${convertedCount}`);
+        console.log('\nAll operations finished.');
     }
 
     return runBatch();

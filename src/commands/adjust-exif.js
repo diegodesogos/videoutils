@@ -53,8 +53,8 @@ async function adjustExifCommand(targetDir, options = {}) {
 
         if (isMismatch) mismatchCount++;
 
-        if (isMismatch && (compareDate || !shouldAdjust)) {
-            console.log(`Mismatch found in: ${file}`);
+        if (shouldAdjust) {
+            console.log(`Mismatch found (Meeting criteria): ${file}`);
             console.log(`  - Filename Date: ${iso}`);
             console.log(`  - Metadata Date: ${currentMetadataDate || 'None'}`);
         }
@@ -65,6 +65,7 @@ async function adjustExifCommand(targetDir, options = {}) {
 
         if (dryRun) {
             console.log(`[DRY RUN] Would adjust: ${file} -> Target Date: ${iso}`);
+            adjustedCount++;
             continue;
         }
 
@@ -99,7 +100,7 @@ async function adjustExifCommand(targetDir, options = {}) {
     console.log(`\nAdjustment Summary:`);
     console.log(`- Files processed: ${processedCount}`);
     console.log(`- Files with date mismatch: ${mismatchCount}`);
-    console.log(`- Files actually adjusted: ${adjustedCount}`);
+    console.log(`- Files adjusted (or would be adjusted): ${adjustedCount}`);
     console.log('\nAll operations finished.');
 }
 
