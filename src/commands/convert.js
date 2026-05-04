@@ -4,6 +4,7 @@ const ffmpeg = require('fluent-ffmpeg');
 const { isVideoFile, getOutputFilePath, getTempFilePath } = require('../utils/file');
 const { getMetadata } = require('../utils/metadata');
 const { extractDateFromTags, formatFfmpegDate, restoreFileDates } = require('../utils/date');
+const { formatSize } = require('../utils/size');
 
 function convertCommand(sourceDir, outputDir, options = {}) {
     const { dryRun } = options;
@@ -24,10 +25,11 @@ function convertCommand(sourceDir, outputDir, options = {}) {
     let processedCount = 0;
     let convertedCount = 0;
     let skippedCount = 0;
+    let totalOriginalBytes = 0;
+    let totalNewBytes = 0;
 
     async function convertVideo(file) {
         return new Promise((resolve, reject) => {
-            processedCount++;
             const filePath = path.join(src, file);
             const outputFilePath = getOutputFilePath(file, out);
             const tempFilePath = getTempFilePath(outputFilePath);
@@ -38,12 +40,7 @@ function convertCommand(sourceDir, outputDir, options = {}) {
                 return resolve();
             }
 
-            if (dryRun) {
-                console.log(`[DRY RUN] Would convert: ${file} -> ${outputFilePath}`);
-                convertedCount++;
-                return resolve();
-            }
-
+            processedCount++;
             const stat = fs.statSync(filePath);
             const meta = getMetadata(filePath);
             if (!meta) {
@@ -51,15 +48,24 @@ function convertCommand(sourceDir, outputDir, options = {}) {
                 return resolve();
             }
 
-            const videoStream = meta.rawStreams.find(s => s.codec_type === 'video');
-            const audioStream = meta.rawStreams.find(s => s.codec_type === 'audio');
+            totalOriginalBytes += stat.size;
 
             const width = meta.width || 0;
             const height = meta.height || 0;
+            const isHevc = (width >= 1280 || height >= 720);
+
+            if (dryRun) {
+                console.log(`[DRY RUN] Would convert: ${file} -> ${outputFilePath} (${isHevc ? 'HEVC' : 'AVC'})`);
+                // Theoretical savings: HEVC ~60% reduction, AVC ~40% reduction
+                const estimatedSavings = isHevc ? 0.6 : 0.4;
+                totalNewBytes += Math.round(stat.size * (1 - estimatedSavings));
+                convertedCount++;
+                return resolve();
+            }
 
             const command = ffmpeg(filePath);
 
-            if (width >= 1280 || height >= 720) {
+            if (isHevc) {
                 console.log(`[HEVC] ${file} (${width}x${height})`);
                 command.videoCodec('libx265').outputOptions(['-crf 23', '-preset medium', '-tag:v hvc1']);
             } else {
@@ -67,6 +73,7 @@ function convertCommand(sourceDir, outputDir, options = {}) {
                 command.videoCodec('libx264').outputOptions(['-crf 18', '-preset slow']);
             }
 
+            const audioStream = meta.rawStreams.find(s => s.codec_type === 'audio');
             if (audioStream) {
                 const codec = audioStream.codec_name;
                 const compatibleCodecs = ['aac', 'mp3', 'ac3', 'eac3', 'alac'];
@@ -80,17 +87,13 @@ function convertCommand(sourceDir, outputDir, options = {}) {
             }
 
             const metadataOptions = ['-map_metadata', '0', '-movflags', 'use_metadata_tags'];
-            
             let creationTime = extractDateFromTags(meta.tags, stat);
-            let make = meta.tags.make || meta.tags.Make;
-            let model = meta.tags.model || meta.tags.Model;
-
             if (creationTime) {
                 creationTime = formatFfmpegDate(creationTime);
                 metadataOptions.push('-metadata', `creation_time=${creationTime}`);
             }
-            if (make) metadataOptions.push('-metadata', `make="${make}"`);
-            if (model) metadataOptions.push('-metadata', `model="${model}"`);
+            if (meta.tags.make || meta.tags.Make) metadataOptions.push('-metadata', `make="${meta.tags.make || meta.tags.Make}"`);
+            if (meta.tags.model || meta.tags.Model) metadataOptions.push('-metadata', `model="${meta.tags.model || meta.tags.Model}"`);
 
             command.outputOptions(metadataOptions);
 
@@ -105,6 +108,8 @@ function convertCommand(sourceDir, outputDir, options = {}) {
                 .on('end', () => { 
                     fs.renameSync(tempFilePath, outputFilePath);
                     restoreFileDates(outputFilePath, stat.atime, stat.mtime, stat.birthtime);
+                    const newStat = fs.statSync(outputFilePath);
+                    totalNewBytes += newStat.size;
                     console.log(`Done: ${file}          `);
                     convertedCount++;
                     resolve();
@@ -117,10 +122,17 @@ function convertCommand(sourceDir, outputDir, options = {}) {
         for (const file of files) {
             await convertVideo(file);
         }
+        
+        const savedBytes = totalOriginalBytes - totalNewBytes;
+        const savedPercent = totalOriginalBytes > 0 ? ((savedBytes / totalOriginalBytes) * 100).toFixed(1) : 0;
+
         console.log(`\nConversion Summary:`);
         console.log(`- Files processed: ${processedCount}`);
-        console.log(`- Files skipped (already exist): ${skippedCount}`);
-        console.log(`- Files converted (or would be): ${convertedCount}`);
+        console.log(`- Files skipped: ${skippedCount}`);
+        console.log(`- Files converted ${dryRun ? '(estimated)' : ''}: ${convertedCount}`);
+        console.log(`- Total Original Size: ${formatSize(totalOriginalBytes)}`);
+        console.log(`- Total New Size ${dryRun ? '(estimated)' : ''}: ${formatSize(totalNewBytes)}`);
+        console.log(`- Space Saved ${dryRun ? '(estimated)' : ''}: ${formatSize(Math.max(0, savedBytes))} (${savedPercent}%)`);
         console.log('\nAll operations finished.');
     }
 
