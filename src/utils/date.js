@@ -54,21 +54,30 @@ function formatFfmpegDate(creationTime) {
     return creationTime;
 }
 
+function formatDateForSetFile(d) {
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    const HH = String(d.getHours()).padStart(2, '0');
+    const MM = String(d.getMinutes()).padStart(2, '0');
+    const SS = String(d.getSeconds()).padStart(2, '0');
+    return `${mm}/${dd}/${yyyy} ${HH}:${MM}:${SS}`;
+}
+
 function restoreFileDates(filePath, atime, mtime, birthtime) {
-    const d = birthtime || mtime;
     try {
-        fs.utimesSync(filePath, atime || d, mtime || d);
+        fs.utimesSync(filePath, atime || mtime, mtime);
     } catch (err) { }
 
     try {
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        const yyyy = d.getFullYear();
-        const HH = String(d.getHours()).padStart(2, '0');
-        const MM = String(d.getMinutes()).padStart(2, '0');
-        const SS = String(d.getSeconds()).padStart(2, '0');
-        const dateStr = `${mm}/${dd}/${yyyy} ${HH}:${MM}:${SS}`;
-        execSync(`SetFile -d "${dateStr}" -m "${dateStr}" "${filePath}"`);
+        if (birthtime) {
+            const birthStr = formatDateForSetFile(birthtime);
+            execSync(`SetFile -d "${birthStr}" "${filePath}"`);
+        }
+        if (mtime) {
+            const mtimeStr = formatDateForSetFile(mtime);
+            execSync(`SetFile -m "${mtimeStr}" "${filePath}"`);
+        }
     } catch (err) {}
 }
 
