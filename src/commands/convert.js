@@ -5,7 +5,8 @@ const { isVideoFile, getOutputFilePath, getTempFilePath } = require('../utils/fi
 const { getMetadata } = require('../utils/metadata');
 const { extractDateFromTags, formatFfmpegDate, restoreFileDates } = require('../utils/date');
 
-function convertCommand(sourceDir, outputDir) {
+function convertCommand(sourceDir, outputDir, options = {}) {
+    const { dryRun } = options;
     const src = path.resolve(sourceDir);
     const out = path.resolve(outputDir);
 
@@ -13,7 +14,7 @@ function convertCommand(sourceDir, outputDir) {
         console.error(`Source directory not found: ${src}`);
         return;
     }
-    if (!fs.existsSync(out)) {
+    if (!fs.existsSync(out) && !dryRun) {
         fs.mkdirSync(out, { recursive: true });
     }
 
@@ -28,6 +29,11 @@ function convertCommand(sourceDir, outputDir) {
 
             if (fs.existsSync(outputFilePath)) {
                 console.log(`Skipping (already converted): ${file}`);
+                return resolve();
+            }
+
+            if (dryRun) {
+                console.log(`[DRY RUN] Would convert: ${file} -> ${outputFilePath}`);
                 return resolve();
             }
 

@@ -2,9 +2,17 @@ const fs = require('fs');
 const path = require('path');
 const ffmpeg = require('fluent-ffmpeg');
 const { isVideoFile, getTempFilePath } = require('../utils/file');
-const { extractDateFromFilename, restoreFileDates } = require('../utils/date');
+const { getMetadata } = require('../utils/metadata');
+const { 
+    extractDateFromFilename, 
+    restoreFileDates, 
+    extractDateFromTags, 
+    formatFfmpegDate,
+    shouldAdjustDate
+} = require('../utils/date');
 
-async function adjustExifCommand(targetDir) {
+async function adjustExifCommand(targetDir, options = {}) {
+    const { compareDate, dryRun } = options;
     const dir = path.resolve(targetDir);
 
     if (!fs.existsSync(dir)) {
@@ -14,6 +22,11 @@ async function adjustExifCommand(targetDir) {
 
     const files = fs.readdirSync(dir).filter(isVideoFile);
     console.log(`Scanning folder: ${dir}`);
+    if (compareDate) console.log(`Filter Mode: ${compareDate}\n`);
+
+    let processedCount = 0;
+    let mismatchCount = 0;
+    let adjustedCount = 0;
 
     for (const file of files) {
         const filePath = path.join(dir, file);
@@ -24,8 +37,39 @@ async function adjustExifCommand(targetDir) {
             continue;
         }
 
+        processedCount++;
         const { iso, dateObj } = extracted;
+        
+        // Extract current metadata date
+        const meta = getMetadata(filePath);
+        const stat = fs.statSync(filePath);
+        let currentMetadataDate = extractDateFromTags(meta.tags, stat);
+        currentMetadataDate = formatFfmpegDate(currentMetadataDate);
+        
+        const filenameDateObj = dateObj;
+        const metaDateObj = currentMetadataDate ? new Date(currentMetadataDate) : null;
+
+        const { isMismatch, shouldAdjust } = shouldAdjustDate(filenameDateObj, metaDateObj, compareDate);
+
+        if (isMismatch) mismatchCount++;
+
+        if (isMismatch && (compareDate || !shouldAdjust)) {
+            console.log(`Mismatch found in: ${file}`);
+            console.log(`  - Filename Date: ${iso}`);
+            console.log(`  - Metadata Date: ${currentMetadataDate || 'None'}`);
+        }
+
+        if (!shouldAdjust) {
+            continue;
+        }
+
+        if (dryRun) {
+            console.log(`[DRY RUN] Would adjust: ${file} -> Target Date: ${iso}`);
+            continue;
+        }
+
         console.log(`Adjusting: ${file} -> Target Date: ${iso}`);
+        adjustedCount++;
 
         const tempPath = getTempFilePath(filePath);
 
@@ -52,7 +96,11 @@ async function adjustExifCommand(targetDir) {
         console.log(`  ✅ Done.`);
     }
 
-    console.log('\nAll EXIF adjustments finished.');
+    console.log(`\nAdjustment Summary:`);
+    console.log(`- Files processed: ${processedCount}`);
+    console.log(`- Files with date mismatch: ${mismatchCount}`);
+    console.log(`- Files actually adjusted: ${adjustedCount}`);
+    console.log('\nAll operations finished.');
 }
 
 module.exports = adjustExifCommand;

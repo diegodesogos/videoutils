@@ -34,15 +34,24 @@ Scans the source directory and transpiles videos.
 - Recursively maps stream-level EXIF data (e.g. `DateTime`, `Make`, `Model`) into the output MP4 format metadata.
 - Applies `fs.utimesSync` and macOS `SetFile` to replicate identical OS modification/birth timestamps on the output.
 
+**Options:**
+- `--dry-run`: Log actions without creating output files or directories.
+
 ```bash
 node src/index.js convert ./test/sourceTest ./test/outputTest
 ```
 
-### `adjust-exif <targetDir>`
+### `adjust-exif <targetDir> [options]`
 Extracts the date and time strings embedded directly within filenames (e.g. `2007-12-07_192638.mp4`).
 - Utilizes `ffmpeg -c copy` to inject a newly formatted ISO-8601 `creation_time` directly into the container header without re-encoding the stream.
 - Re-aligns OS `birthtime` and `mtime` to match.
 - Designed to fallback to the furthest-right date sequence if multiple dates exist in the string.
+
+**Options:**
+- `--compareDate=distinct` (Default): Only adjust files where filename date and metadata date differ. Logs mismatches.
+- `--compareDate=fileNameNewer`: Only adjust if the date extracted from the filename is more recent than the metadata.
+- `--compareDate=fileNameOlder`: Only adjust if the existing metadata date is more recent than the filename.
+- `--dry-run`: Log actions without modifying any files. Useful for testing comparison filters.
 
 ```bash
 node src/index.js adjust-exif ./test/outputTest

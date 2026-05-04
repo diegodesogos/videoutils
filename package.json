@@ -8,7 +8,9 @@
   },
   "scripts": {
     "test": "node --test test/unit/*.test.js",
-    "inspect": "node ./src/index.js inspect"
+    "inspect": "node ./src/index.js inspect",
+    "convert": "node ./src/index.js convert",
+    "adjust": "node ./src/index.js adjust-exif"
   },
   "dependencies": {
     "fluent-ffmpeg": "^2.1.2"

@@ -72,4 +72,40 @@ function restoreFileDates(filePath, atime, mtime, birthtime) {
     } catch (err) {}
 }
 
-module.exports = { extractDateFromFilename, extractDateFromTags, formatFfmpegDate, restoreFileDates };
+/**
+ * Decides if a date adjustment should occur based on a comparison mode.
+ * @param {Date} filenameDate 
+ * @param {Date} metadataDate 
+ * @param {string} mode - 'distinct', 'fileNameNewer', 'fileNameOlder'
+ * @returns {{ isMismatch: boolean, shouldAdjust: boolean }}
+ */
+function shouldAdjustDate(filenameDate, metadataDate, mode) {
+    if (!filenameDate) return { isMismatch: false, shouldAdjust: false };
+
+    const isMismatch = !metadataDate || Math.abs(metadataDate.getTime() - filenameDate.getTime()) > 1000;
+    
+    // Default behavior (no mode) is equivalent to 'distinct'
+    if (!mode || mode === 'distinct') {
+        return { isMismatch, shouldAdjust: isMismatch };
+    }
+
+    let shouldAdjust = false;
+    switch (mode) {
+        case 'fileNameNewer':
+            shouldAdjust = !!(metadataDate && filenameDate.getTime() > metadataDate.getTime());
+            break;
+        case 'fileNameOlder':
+            shouldAdjust = !!(metadataDate && filenameDate.getTime() < metadataDate.getTime());
+            break;
+    }
+
+    return { isMismatch, shouldAdjust };
+}
+
+module.exports = { 
+    extractDateFromFilename, 
+    extractDateFromTags, 
+    formatFfmpegDate, 
+    restoreFileDates,
+    shouldAdjustDate
+};

@@ -15,17 +15,22 @@ Usage:
   node src/index.js <command> [options]
 
 Commands:
-  convert <sourceDir> <outputDir>    Convert videos (HEVC/AVC) and preserve metadata
+  convert <sourceDir> <outputDir> [options] Convert videos (HEVC/AVC) and preserve metadata
+                                       --dry-run                   Log actions without modifying files
   inspect <targetDir> [options]      Inspect video metadata
                                        --min-duration=<mins>
                                        --min-height=<pixels>
                                        --min-resolution=<width>x<height>
-  adjust-exif <targetDir>            Adjust EXIF and OS dates based on filename
+  adjust-exif <targetDir> [options]  Adjust EXIF and OS dates based on filename
+                                       --compareDate=distinct      Only if dates differ
+                                       --compareDate=fileNameNewer Only if filename date is newer
+                                       --compareDate=fileNameOlder Only if metadata date is newer
+                                       --dry-run                   Log actions without modifying files
 
 Examples:
   node src/index.js convert ./source ./output
   node src/index.js inspect ./output --min-height=720
-  node src/index.js adjust-exif ./output
+  node src/index.js adjust-exif ./output --compareDate=distinct
     `);
 }
 
@@ -42,7 +47,11 @@ switch (command) {
             console.error('Error: Source and output directories are required.');
             process.exit(1);
         }
-        convertCommand(src, out);
+        const options = {};
+        args.slice(3).forEach(arg => {
+            if (arg === '--dry-run') options.dryRun = true;
+        });
+        convertCommand(src, out, options);
         break;
     }
     case 'inspect': {
@@ -62,11 +71,16 @@ switch (command) {
     }
     case 'adjust-exif': {
         const target = args[1];
-        if (!target) {
+        if (!target || target.startsWith('--')) {
             console.error('Error: Target directory is required.');
             process.exit(1);
         }
-        adjustExifCommand(target);
+        const options = {};
+        args.slice(2).forEach(arg => {
+            if (arg === '--dry-run') options.dryRun = true;
+            if (arg.startsWith('--compareDate=')) options.compareDate = arg.split('=')[1];
+        });
+        adjustExifCommand(target, options);
         break;
     }
     default:
