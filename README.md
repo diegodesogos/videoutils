@@ -54,6 +54,7 @@ Iterates through a directory, spawning `ffprobe` to pull and summarize video res
 **Options:**
 - `--min-duration=<mins>`
 - `--min-height=<pixels>`
+- `--min-resolution=<width>x<height>` (or single number for width)
 
 ```bash
 node src/index.js inspect ./test/sourceTest --min-height=720

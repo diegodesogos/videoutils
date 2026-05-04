@@ -2,9 +2,10 @@ const fs = require('fs');
 const path = require('path');
 const { isVideoFile } = require('../utils/file');
 const { getMetadata } = require('../utils/metadata');
+const { matchesFilters } = require('../utils/filter');
 
 function inspectCommand(targetDir, options = {}) {
-    const { minDuration, minHeight } = options;
+    const { minDuration, minHeight, minResolution } = options;
     const absolutePath = path.resolve(targetDir);
     
     if (!fs.existsSync(absolutePath)) {
@@ -26,10 +27,7 @@ function inspectCommand(targetDir, options = {}) {
 
         const stat = fs.statSync(filePath);
 
-        const matchesDuration = minDuration ? (meta.duration / 60) >= parseFloat(minDuration) : true;
-        const matchesHeight = minHeight ? meta.height >= parseInt(minHeight) : true;
-
-        if (matchesDuration && matchesHeight) {
+        if (matchesFilters(meta, options)) {
             foundCount++;
             console.log(`File: ${file}`);
             console.log(`  Codec: ${meta.codec} | Res: ${meta.width}x${meta.height} | Duration: ${(meta.duration / 60).toFixed(2)} mins`);

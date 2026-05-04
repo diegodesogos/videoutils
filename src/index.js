@@ -19,6 +19,7 @@ Commands:
   inspect <targetDir> [options]      Inspect video metadata
                                        --min-duration=<mins>
                                        --min-height=<pixels>
+                                       --min-resolution=<width>x<height>
   adjust-exif <targetDir>            Adjust EXIF and OS dates based on filename
 
 Examples:
@@ -54,6 +55,7 @@ switch (command) {
         args.slice(2).forEach(arg => {
             if (arg.startsWith('--min-duration=')) options.minDuration = arg.split('=')[1];
             if (arg.startsWith('--min-height=')) options.minHeight = arg.split('=')[1];
+            if (arg.startsWith('--min-resolution=')) options.minResolution = arg.split('=')[1];
         });
         inspectCommand(target, options);
         break;
