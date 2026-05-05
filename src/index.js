@@ -25,6 +25,7 @@ Commands:
                                        --compareDate=distinct      Only if dates differ
                                        --compareDate=fileNameNewer Only if filename date is newer
                                        --compareDate=fileNameOlder Only if metadata date is newer
+                                       --syncFS                    One-way sync EXIF date to file system dates
                                        --dry-run                   Log actions without modifying files
 
 Examples:
@@ -78,6 +79,7 @@ switch (command) {
         const options = {};
         args.slice(2).forEach(arg => {
             if (arg === '--dry-run') options.dryRun = true;
+            if (arg === '--syncFS') options.syncFS = true;
             if (arg.startsWith('--compareDate=')) options.compareDate = arg.split('=')[1];
         });
         adjustExifCommand(target, options);

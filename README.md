@@ -34,8 +34,10 @@ Scans the source directory and transpiles videos.
 - Recursively maps stream-level EXIF data (e.g. `DateTime`, `Make`, `Model`) into the output MP4 format metadata.
 - Applies `fs.utimesSync` and macOS `SetFile` to replicate identical OS modification/birth timestamps on the output.
 
+- Calculates and displays a comprehensive **Space Saving Summary** (Actual vs Estimated in dry-run).
+
 **Options:**
-- `--dry-run`: Log actions without creating output files or directories.
+- `--dry-run`: Log actions and estimate space savings without creating output files or directories.
 
 ```bash
 node src/index.js convert ./test/sourceTest ./test/outputTest
@@ -51,6 +53,7 @@ Extracts the date and time strings embedded directly within filenames (e.g. `200
 - `--compareDate=distinct` (Default): Only adjust files where filename date and metadata date differ. Logs mismatches.
 - `--compareDate=fileNameNewer`: Only adjust if the date extracted from the filename is more recent than the metadata.
 - `--compareDate=fileNameOlder`: Only adjust if the existing metadata date is more recent than the filename.
+- `--syncFS`: One-way sync. Ensures OS file system timestamps match the internal EXIF metadata, even if no metadata adjustment is required.
 - `--dry-run`: Log actions without modifying any files. Useful for testing comparison filters.
 
 ```bash

@@ -12,7 +12,7 @@ const {
 } = require('../utils/date');
 
 async function adjustExifCommand(targetDir, options = {}) {
-    const { compareDate, dryRun } = options;
+    const { compareDate, dryRun, syncFS } = options;
     const dir = path.resolve(targetDir);
 
     if (!fs.existsSync(dir)) {
@@ -27,6 +27,7 @@ async function adjustExifCommand(targetDir, options = {}) {
     let processedCount = 0;
     let mismatchCount = 0;
     let adjustedCount = 0;
+    let syncedCount = 0;
 
     for (const file of files) {
         const filePath = path.join(dir, file);
@@ -60,6 +61,19 @@ async function adjustExifCommand(targetDir, options = {}) {
         }
 
         if (!shouldAdjust) {
+            if (syncFS && metaDateObj) {
+                const isFsSynced = Math.abs(stat.mtime.getTime() - metaDateObj.getTime()) < 1000;
+                if (!isFsSynced) {
+                    if (dryRun) {
+                        console.log(`[DRY RUN] Would sync FS dates to Metadata Date: ${currentMetadataDate} for ${file}`);
+                    } else {
+                        console.log(`Syncing FS dates to Metadata Date: ${currentMetadataDate} for ${file}`);
+                        restoreFileDates(filePath, metaDateObj, metaDateObj, metaDateObj);
+                        console.log(`  ✅ FS Synced.`);
+                    }
+                    syncedCount++;
+                }
+            }
             continue;
         }
 
@@ -101,6 +115,9 @@ async function adjustExifCommand(targetDir, options = {}) {
     console.log(`- Files processed: ${processedCount}`);
     console.log(`- Files with date mismatch: ${mismatchCount}`);
     console.log(`- Files adjusted (or would be adjusted): ${adjustedCount}`);
+    if (syncFS) {
+        console.log(`- Files with FS synced to EXIF (only): ${syncedCount}`);
+    }
     console.log('\nAll operations finished.');
 }
 
