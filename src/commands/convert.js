@@ -22,6 +22,7 @@ function convertCommand(sourceDir, outputDir, options = {}) {
     const files = fs.readdirSync(src).filter(isVideoFile);
     console.log(`Scanning: ${src}`);
 
+    let scannedCount = files.length;
     let processedCount = 0;
     let convertedCount = 0;
     let skippedCount = 0;
@@ -127,12 +128,15 @@ function convertCommand(sourceDir, outputDir, options = {}) {
         const savedPercent = totalOriginalBytes > 0 ? ((savedBytes / totalOriginalBytes) * 100).toFixed(1) : 0;
 
         console.log(`\nConversion Summary:`);
-        console.log(`- Files processed: ${processedCount}`);
-        console.log(`- Files skipped: ${skippedCount}`);
+        console.log(`- Total files scanned: ${scannedCount}`);
+        console.log(`- Files skipped (already converted): ${skippedCount}`);
+        console.log(`- Files processed (to be converted): ${processedCount}`);
         console.log(`- Files converted ${dryRun ? '(estimated)' : ''}: ${convertedCount}`);
-        console.log(`- Total Original Size: ${formatSize(totalOriginalBytes)}`);
-        console.log(`- Total New Size ${dryRun ? '(estimated)' : ''}: ${formatSize(totalNewBytes)}`);
-        console.log(`- Space Saved ${dryRun ? '(estimated)' : ''}: ${formatSize(Math.max(0, savedBytes))} (${savedPercent}%)`);
+        if (processedCount > 0) {
+            console.log(`- Total Original Size: ${formatSize(totalOriginalBytes)}`);
+            console.log(`- Total New Size ${dryRun ? '(estimated)' : ''}: ${formatSize(totalNewBytes)}`);
+            console.log(`- Space Saved ${dryRun ? '(estimated)' : ''}: ${formatSize(Math.max(0, savedBytes))} (${savedPercent}%)`);
+        }
         console.log('\nAll operations finished.');
     }
 

@@ -24,7 +24,9 @@ async function adjustExifCommand(targetDir, options = {}) {
     console.log(`Scanning folder: ${dir}`);
     if (compareDate) console.log(`Filter Mode: ${compareDate}\n`);
 
+    let scannedCount = files.length;
     let processedCount = 0;
+    let skippedCount = 0;
     let mismatchCount = 0;
     let adjustedCount = 0;
     let syncedCount = 0;
@@ -35,6 +37,7 @@ async function adjustExifCommand(targetDir, options = {}) {
         
         if (!extracted) {
             console.log(`Skipping: ${file} (No valid date found in filename)`);
+            skippedCount++;
             continue;
         }
 
@@ -52,7 +55,7 @@ async function adjustExifCommand(targetDir, options = {}) {
 
         const { isMismatch, shouldAdjust } = shouldAdjustDate(filenameDateObj, metaDateObj, compareDate);
 
-        if (isMismatch) mismatchCount++;
+        if (shouldAdjust) mismatchCount++;
 
         if (shouldAdjust) {
             console.log(`Mismatch found (Meeting criteria): ${file}`);
@@ -112,8 +115,14 @@ async function adjustExifCommand(targetDir, options = {}) {
     }
 
     console.log(`\nAdjustment Summary:`);
-    console.log(`- Files processed: ${processedCount}`);
-    console.log(`- Files with date mismatch: ${mismatchCount}`);
+    console.log(`- Total files scanned: ${scannedCount}`);
+    console.log(`- Files skipped (invalid filename): ${skippedCount}`);
+    console.log(`- Files processed (valid date): ${processedCount}`);
+    if (compareDate) {
+        console.log(`- Files matching filter '${compareDate}': ${mismatchCount}`);
+    } else {
+        console.log(`- Files with date mismatch: ${mismatchCount}`);
+    }
     console.log(`- Files adjusted (or would be adjusted): ${adjustedCount}`);
     if (syncFS) {
         console.log(`- Files with FS synced to EXIF (only): ${syncedCount}`);
