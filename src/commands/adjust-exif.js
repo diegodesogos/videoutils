@@ -66,9 +66,11 @@ async function adjustExifCommand(targetDir, options = {}) {
         }
 
         if (!shouldAdjust) {
+            let handled = false;
             if (syncFS && metaDateObj) {
                 const isFsSynced = Math.abs(stat.mtime.getTime() - metaDateObj.getTime()) < 1000;
                 if (!isFsSynced) {
+                    handled = true;
                     if (dryRun) {
                         console.log(`[${currentIndex}/${scannedCount}] [DRY RUN] Would sync FS dates to Metadata Date: ${currentMetadataDate} for ${file}`);
                     } else {
@@ -78,6 +80,9 @@ async function adjustExifCommand(targetDir, options = {}) {
                     }
                     syncedCount++;
                 }
+            }
+            if (!handled) {
+                console.log(`[${currentIndex}/${scannedCount}] OK (no changes needed): ${file}`);
             }
             continue;
         }

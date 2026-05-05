@@ -45,7 +45,7 @@ function convertCommand(sourceDir, outputDir, options = {}) {
             const stat = fs.statSync(filePath);
             const meta = getMetadata(filePath);
             if (!meta) {
-                console.error(`  Error: Failed to get metadata for ${file}`);
+                console.error(`[${currentIndex}/${totalFiles}] Error: Failed to get metadata for ${file}`);
                 return resolve();
             }
 
