@@ -29,14 +29,14 @@ function convertCommand(sourceDir, outputDir, options = {}) {
     let totalOriginalBytes = 0;
     let totalNewBytes = 0;
 
-    async function convertVideo(file) {
+    async function convertVideo(file, currentIndex, totalFiles) {
         return new Promise((resolve, reject) => {
             const filePath = path.join(src, file);
             const outputFilePath = getOutputFilePath(file, out);
             const tempFilePath = getTempFilePath(outputFilePath);
 
             if (fs.existsSync(outputFilePath)) {
-                console.log(`Skipping (already converted): ${file}`);
+                console.log(`[${currentIndex}/${totalFiles}] Skipping (already converted): ${file}`);
                 skippedCount++;
                 return resolve();
             }
@@ -56,7 +56,7 @@ function convertCommand(sourceDir, outputDir, options = {}) {
             const isHevc = (width >= 1280 || height >= 720);
 
             if (dryRun) {
-                console.log(`[DRY RUN] Would convert: ${file} -> ${outputFilePath} (${isHevc ? 'HEVC' : 'AVC'})`);
+                console.log(`[${currentIndex}/${totalFiles}] [DRY RUN] Would convert: ${file} -> ${outputFilePath} (${isHevc ? 'HEVC' : 'AVC'})`);
                 // Theoretical savings: HEVC ~60% reduction, AVC ~40% reduction
                 const estimatedSavings = isHevc ? 0.6 : 0.4;
                 totalNewBytes += Math.round(stat.size * (1 - estimatedSavings));
@@ -67,10 +67,10 @@ function convertCommand(sourceDir, outputDir, options = {}) {
             const command = ffmpeg(filePath);
 
             if (isHevc) {
-                console.log(`[HEVC] ${file} (${width}x${height})`);
+                console.log(`[${currentIndex}/${totalFiles}] [HEVC] ${file} (${width}x${height})`);
                 command.videoCodec('libx265').outputOptions(['-crf 23', '-preset medium', '-tag:v hvc1']);
             } else {
-                console.log(`[AVC]  ${file} (${width}x${height})`);
+                console.log(`[${currentIndex}/${totalFiles}] [AVC]  ${file} (${width}x${height})`);
                 command.videoCodec('libx264').outputOptions(['-crf 18', '-preset slow']);
             }
 
@@ -105,13 +105,13 @@ function convertCommand(sourceDir, outputDir, options = {}) {
                     if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
                     resolve();
                 })
-                .on('progress', (p) => process.stdout.write(`Progress: ${Math.floor(p.percent)}% \r`))
+                .on('progress', (p) => process.stdout.write(`[${currentIndex}/${totalFiles}] Progress: ${Math.floor(p.percent)}% \r`))
                 .on('end', () => { 
                     fs.renameSync(tempFilePath, outputFilePath);
                     restoreFileDates(outputFilePath, stat.atime, stat.mtime, stat.birthtime);
                     const newStat = fs.statSync(outputFilePath);
                     totalNewBytes += newStat.size;
-                    console.log(`Done: ${file}          `);
+                    console.log(`[${currentIndex}/${totalFiles}] Done: ${file}          `);
                     convertedCount++;
                     resolve();
                 })
@@ -120,8 +120,10 @@ function convertCommand(sourceDir, outputDir, options = {}) {
     }
 
     async function runBatch() {
+        let currentIndex = 1;
         for (const file of files) {
-            await convertVideo(file);
+            await convertVideo(file, currentIndex, scannedCount);
+            currentIndex++;
         }
         
         const savedBytes = totalOriginalBytes - totalNewBytes;

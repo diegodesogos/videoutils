@@ -30,13 +30,15 @@ async function adjustExifCommand(targetDir, options = {}) {
     let mismatchCount = 0;
     let adjustedCount = 0;
     let syncedCount = 0;
+    let currentIndex = 0;
 
     for (const file of files) {
+        currentIndex++;
         const filePath = path.join(dir, file);
         const extracted = extractDateFromFilename(file);
         
         if (!extracted) {
-            console.log(`Skipping: ${file} (No valid date found in filename)`);
+            console.log(`[${currentIndex}/${scannedCount}] Skipping: ${file} (No valid date found in filename)`);
             skippedCount++;
             continue;
         }
@@ -58,7 +60,7 @@ async function adjustExifCommand(targetDir, options = {}) {
         if (shouldAdjust) mismatchCount++;
 
         if (shouldAdjust) {
-            console.log(`Mismatch found (Meeting criteria): ${file}`);
+            console.log(`[${currentIndex}/${scannedCount}] Mismatch found (Meeting criteria): ${file}`);
             console.log(`  - Filename Date: ${iso}`);
             console.log(`  - Metadata Date: ${currentMetadataDate || 'None'}`);
         }
@@ -68,9 +70,9 @@ async function adjustExifCommand(targetDir, options = {}) {
                 const isFsSynced = Math.abs(stat.mtime.getTime() - metaDateObj.getTime()) < 1000;
                 if (!isFsSynced) {
                     if (dryRun) {
-                        console.log(`[DRY RUN] Would sync FS dates to Metadata Date: ${currentMetadataDate} for ${file}`);
+                        console.log(`[${currentIndex}/${scannedCount}] [DRY RUN] Would sync FS dates to Metadata Date: ${currentMetadataDate} for ${file}`);
                     } else {
-                        console.log(`Syncing FS dates to Metadata Date: ${currentMetadataDate} for ${file}`);
+                        console.log(`[${currentIndex}/${scannedCount}] Syncing FS dates to Metadata Date: ${currentMetadataDate} for ${file}`);
                         restoreFileDates(filePath, metaDateObj, metaDateObj, metaDateObj);
                         console.log(`  ✅ FS Synced.`);
                     }
@@ -81,12 +83,12 @@ async function adjustExifCommand(targetDir, options = {}) {
         }
 
         if (dryRun) {
-            console.log(`[DRY RUN] Would adjust: ${file} -> Target Date: ${iso}`);
+            console.log(`[${currentIndex}/${scannedCount}] [DRY RUN] Would adjust: ${file} -> Target Date: ${iso}`);
             adjustedCount++;
             continue;
         }
 
-        console.log(`Adjusting: ${file} -> Target Date: ${iso}`);
+        console.log(`[${currentIndex}/${scannedCount}] Adjusting: ${file} -> Target Date: ${iso}`);
         adjustedCount++;
 
         const tempPath = getTempFilePath(filePath);
@@ -98,9 +100,17 @@ async function adjustExifCommand(targetDir, options = {}) {
                     '-map', '0',
                     '-metadata', `creation_time=${iso}`
                 ])
-                .on('end', () => resolve())
+                .on('progress', (p) => {
+                    if (p.percent) {
+                        process.stdout.write(`[${currentIndex}/${scannedCount}] Progress: ${Math.floor(p.percent)}% \r`);
+                    }
+                })
+                .on('end', () => {
+                    process.stdout.write(' '.repeat(50) + '\r'); // clear progress line
+                    resolve();
+                })
                 .on('error', (err) => {
-                    console.error(`  Error adjusting EXIF: ${err.message}`);
+                    console.error(`\n  Error adjusting EXIF: ${err.message}`);
                     resolve();
                 })
                 .save(tempPath);
