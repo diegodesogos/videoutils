@@ -21,7 +21,52 @@ function getProfile(config, profileName) {
     return profile;
 }
 
+const convertCommand = require('../commands/convert');
+const adjustExifCommand = require('../commands/adjust-exif');
+const inspectCommand = require('../commands/inspect');
+
+function validateProfile(profile) {
+    if (!Array.isArray(profile)) {
+        throw new Error('Profile must be an array of commands.');
+    }
+
+    const errors = [];
+    profile.forEach((step, index) => {
+        const stepNum = index + 1;
+        if (!step.command) {
+            errors.push(`Step ${stepNum}: Missing "command" property.`);
+            return;
+        }
+
+        let commandErrors = [];
+        switch (step.command) {
+            case 'convert':
+                commandErrors = convertCommand.validate(step);
+                break;
+            case 'adjust-exif':
+                commandErrors = adjustExifCommand.validate(step);
+                break;
+            case 'inspect':
+                commandErrors = inspectCommand.validate(step);
+                break;
+            default:
+                errors.push(`Step ${stepNum}: Unknown command "${step.command}".`);
+        }
+
+        if (commandErrors.length > 0) {
+            commandErrors.forEach(err => {
+                errors.push(`Step ${stepNum} (${step.command}): ${err}`);
+            });
+        }
+    });
+
+    if (errors.length > 0) {
+        throw new Error(`Configuration errors found:\n- ${errors.join('\n- ')}`);
+    }
+}
+
 module.exports = {
     loadConfig,
-    getProfile
+    getProfile,
+    validateProfile
 };

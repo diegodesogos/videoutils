@@ -48,4 +48,32 @@ function inspectCommand(targetDir, options = {}) {
     console.log(`Total matches found: ${foundCount}`);
 }
 
+function validate(params) {
+    const { targetDir, options } = params;
+    const errors = [];
+
+    if (!targetDir) {
+        errors.push('Missing "targetDir"');
+    } else if (!fs.existsSync(path.resolve(targetDir))) {
+        errors.push(`targetDir not found: ${targetDir}`);
+    }
+
+    if (options) {
+        if (typeof options !== 'object') {
+            errors.push('"options" must be an object');
+        } else {
+            const validOptions = ['minDuration', 'minHeight', 'minResolution'];
+            Object.keys(options).forEach(key => {
+                if (!validOptions.includes(key)) {
+                    errors.push(`Unknown option: "${key}"`);
+                }
+            });
+            // Additional basic value validation could go here if needed
+        }
+    }
+
+    return errors;
+}
+
 module.exports = inspectCommand;
+module.exports.validate = validate;

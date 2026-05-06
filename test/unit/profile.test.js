@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { loadConfig, getProfile } = require('../../src/utils/profile');
+const { loadConfig, getProfile, validateProfile } = require('../../src/utils/profile');
 
 test('Profile Utility', async (t) => {
     const mockConfigPath = path.join(__dirname, 'mock-config.json');
@@ -43,5 +43,35 @@ test('Profile Utility', async (t) => {
     await t.test('getProfile should throw error if profile missing', () => {
         const config = { profiles: {} };
         assert.throws(() => getProfile(config, 'missing'), /Profile "missing" not found/);
+    });
+
+    await t.test('validateProfile should catch missing parameters', () => {
+        const invalidProfile = [{ command: 'convert' }]; // missing sourceDir, outputDir
+        assert.throws(() => validateProfile(invalidProfile), /Missing "sourceDir"/);
+    });
+
+    await t.test('validateProfile should catch unknown commands', () => {
+        const invalidProfile = [{ command: 'invalid' }];
+        assert.throws(() => validateProfile(invalidProfile), /Unknown command "invalid"/);
+    });
+
+    await t.test('validateProfile should catch invalid options type', () => {
+        const invalidProfile = [{ command: 'inspect', targetDir: '.', options: 'not-an-object' }];
+        assert.throws(() => validateProfile(invalidProfile), /"options" must be an object/);
+    });
+
+    await t.test('validateProfile should catch unknown options', () => {
+        const invalidProfile = [{ command: 'convert', sourceDir: '.', outputDir: '.', options: { unknown: true } }];
+        assert.throws(() => validateProfile(invalidProfile), /Unknown option: "unknown"/);
+    });
+
+    await t.test('validateProfile should catch invalid compareDate values', () => {
+        const invalidProfile = [{ command: 'adjust-exif', targetDir: '.', options: { compareDate: 'invalid' } }];
+        assert.throws(() => validateProfile(invalidProfile), /Invalid compareDate value: "invalid"/);
+    });
+
+    await t.test('validateProfile should pass for valid profile', () => {
+        const validProfile = [{ command: 'inspect', targetDir: '.' }];
+        assert.doesNotThrow(() => validateProfile(validProfile));
     });
 });

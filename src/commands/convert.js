@@ -145,4 +145,38 @@ function convertCommand(sourceDir, outputDir, options = {}) {
     return runBatch();
 }
 
+function validate(params) {
+    const { sourceDir, outputDir, options } = params;
+    const errors = [];
+
+    if (!sourceDir) {
+        errors.push('Missing "sourceDir"');
+    } else if (!fs.existsSync(path.resolve(sourceDir))) {
+        errors.push(`sourceDir not found: ${sourceDir}`);
+    }
+
+    if (!outputDir) {
+        errors.push('Missing "outputDir"');
+    }
+
+    if (options) {
+        if (typeof options !== 'object') {
+            errors.push('"options" must be an object');
+        } else {
+            const validOptions = ['dryRun'];
+            Object.keys(options).forEach(key => {
+                if (!validOptions.includes(key)) {
+                    errors.push(`Unknown option: "${key}"`);
+                }
+            });
+            if (options.dryRun !== undefined && typeof options.dryRun !== 'boolean') {
+                errors.push('"dryRun" must be a boolean');
+            }
+        }
+    }
+
+    return errors;
+}
+
 module.exports = convertCommand;
+module.exports.validate = validate;

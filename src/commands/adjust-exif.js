@@ -145,4 +145,43 @@ async function adjustExifCommand(targetDir, options = {}) {
     console.log('\nAll operations finished.');
 }
 
+function validate(params) {
+    const { targetDir, options } = params;
+    const errors = [];
+
+    if (!targetDir) {
+        errors.push('Missing "targetDir"');
+    } else if (!fs.existsSync(path.resolve(targetDir))) {
+        errors.push(`targetDir not found: ${targetDir}`);
+    }
+
+    if (options) {
+        if (typeof options !== 'object') {
+            errors.push('"options" must be an object');
+        } else {
+            const validOptions = ['compareDate', 'syncFS', 'dryRun'];
+            const validCompareDateValues = ['distinct', 'fileNameNewer', 'fileNameOlder'];
+
+            Object.keys(options).forEach(key => {
+                if (!validOptions.includes(key)) {
+                    errors.push(`Unknown option: "${key}"`);
+                }
+            });
+
+            if (options.compareDate && !validCompareDateValues.includes(options.compareDate)) {
+                errors.push(`Invalid compareDate value: "${options.compareDate}". Expected one of: ${validCompareDateValues.join(', ')}`);
+            }
+            if (options.syncFS !== undefined && typeof options.syncFS !== 'boolean') {
+                errors.push('"syncFS" must be a boolean');
+            }
+            if (options.dryRun !== undefined && typeof options.dryRun !== 'boolean') {
+                errors.push('"dryRun" must be a boolean');
+            }
+        }
+    }
+
+    return errors;
+}
+
 module.exports = adjustExifCommand;
+module.exports.validate = validate;
