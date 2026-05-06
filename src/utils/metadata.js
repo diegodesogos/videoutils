@@ -2,19 +2,19 @@ const { execSync } = require('child_process');
 
 function getMetadata(filePath) {
     try {
-        const cmd = `ffprobe -v error -select_streams v:0 -show_entries format=duration:format_tags -show_entries stream=width,height,codec_name:stream_tags -of json "${filePath}"`;
+        const cmd = `ffprobe -v error -show_entries format=duration:format_tags -show_entries stream=codec_type,codec_name,width,height:stream_tags -of json "${filePath}"`;
         const output = execSync(cmd).toString();
         const data = JSON.parse(output);
         
-        const stream = data.streams && data.streams[0] ? data.streams[0] : {};
+        const videoStream = (data.streams || []).find(s => s.codec_type === 'video') || {};
         const format = data.format || {};
         
-        const allTags = { ...(format.tags || {}), ...(stream.tags || {}) };
+        const allTags = { ...(format.tags || {}), ...(videoStream.tags || {}) };
         
         return {
-            codec: stream.codec_name,
-            width: parseInt(stream.width),
-            height: parseInt(stream.height),
+            codec: videoStream.codec_name,
+            width: parseInt(videoStream.width),
+            height: parseInt(videoStream.height),
             duration: parseFloat(format.duration),
             tags: allTags,
             rawStreams: data.streams || [],
