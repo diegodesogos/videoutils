@@ -1,0 +1,30 @@
+{
+  "profiles": {
+    "sample-workflow": [
+      {
+        "command": "convert",
+        "sourceDir": "./input",
+        "outputDir": "./output",
+        "options": {
+          "dryRun": true
+        }
+      },
+      {
+        "command": "adjust-exif",
+        "targetDir": "./output",
+        "options": {
+          "compareDate": "distinct",
+          "syncFS": true,
+          "dryRun": true
+        }
+      },
+      {
+        "command": "inspect",
+        "targetDir": "./output",
+        "options": {
+          "minHeight": 720
+        }
+      }
+    ]
+  }
+}

@@ -10,7 +10,8 @@
     "test": "node --test test/unit/*.test.js",
     "inspect": "node ./src/index.js inspect",
     "convert": "node ./src/index.js convert",
-    "adjust-exif": "node ./src/index.js adjust-exif"
+    "adjust-exif": "node ./src/index.js adjust-exif",
+    "profile": "node ./src/index.js --profile"
   },
   "dependencies": {
     "fluent-ffmpeg": "^2.1.2"

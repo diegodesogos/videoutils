@@ -72,6 +72,46 @@ Iterates through a directory, spawning `ffprobe` to pull and summarize video res
 node src/index.js inspect ./test/sourceTest --min-height=720
 ```
 
+### Profiles
+The CLI supports running a preconfigured chain of commands defined in a `video-utils.config.json` file. This is useful for automating repetitive workflows.
+
+**Usage:**
+```bash
+# Direct usage
+node src/index.js --profile=<name>
+
+# NPM shortcut (requires -- to pass arguments)
+npm run profile -- <name>
+```
+
+**Configuration File (`video-utils.config.json`):**
+The CLI looks for a `video-utils.config.json` file in the root of your project. A sample file is provided as `video-utils.config.sample.json`. To use profiles, copy the sample file and rename it to `video-utils.config.json`.
+
+```json
+{
+  "profiles": {
+    "daily-sync": [
+      {
+        "command": "convert",
+        "sourceDir": "./input",
+        "outputDir": "./output",
+        "options": { "dryRun": false }
+      },
+      {
+        "command": "adjust-exif",
+        "targetDir": "./output",
+        "options": { "compareDate": "distinct", "syncFS": true }
+      },
+      {
+        "command": "inspect",
+        "targetDir": "./output",
+        "options": { "minHeight": 720 }
+      }
+    ]
+  }
+}
+```
+
 ## Testing
 
 This project utilizes Node.js's native `node:test` runner and `node:assert` modules, ensuring zero overhead and no third-party test dependencies. Tests focus strictly on validating regex boundaries and utility behaviors.
