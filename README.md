@@ -46,6 +46,9 @@ node src/index.js convert ./test/sourceTest ./test/outputTest
 
 # Single file processing
 node src/index.js convert ./test/sourceTest/video.mp4 ./test/outputTest
+
+# Processing with options
+node src/index.js convert ./test/sourceTest ./test/outputTest --dry-run --no-recursive
 ```
 
 ### `adjust-exif <targetDirOrFile> [options]`
