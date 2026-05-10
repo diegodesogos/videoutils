@@ -7,7 +7,7 @@ const { extractDateFromTags, formatFfmpegDate, restoreFileDates } = require('../
 const { formatSize } = require('../utils/size');
 
 function convertCommand(sourceDir, outputDir, options = {}) {
-    const { dryRun } = options;
+    const { dryRun, recursive = true } = options;
     const src = path.resolve(sourceDir);
     const out = path.resolve(outputDir);
 
@@ -19,8 +19,9 @@ function convertCommand(sourceDir, outputDir, options = {}) {
         fs.mkdirSync(out, { recursive: true });
     }
 
-    const files = fs.readdirSync(src).filter(isVideoFile);
-    console.log(`Scanning: ${src}`);
+    const files = fs.readdirSync(src, { recursive })
+        .filter(file => isVideoFile(file) && fs.statSync(path.join(src, file)).isFile());
+    console.log(`Scanning: ${src} (recursive: ${recursive})`);
 
     let scannedCount = files.length;
     let processedCount = 0;
@@ -163,7 +164,7 @@ function validate(params) {
         if (typeof options !== 'object') {
             errors.push('"options" must be an object');
         } else {
-            const validOptions = ['dryRun'];
+            const validOptions = ['dryRun', 'recursive'];
             Object.keys(options).forEach(key => {
                 if (!validOptions.includes(key)) {
                     errors.push(`Unknown option: "${key}"`);
@@ -171,6 +172,9 @@ function validate(params) {
             });
             if (options.dryRun !== undefined && typeof options.dryRun !== 'boolean') {
                 errors.push('"dryRun" must be a boolean');
+            }
+            if (options.recursive !== undefined && typeof options.recursive !== 'boolean') {
+                errors.push('"recursive" must be a boolean');
             }
         }
     }

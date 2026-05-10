@@ -21,6 +21,7 @@ Usage:
 Commands:
   convert <sourceDir> <outputDir> [options] Convert videos (HEVC/AVC) and preserve metadata
                                        --dry-run                   Log actions without modifying files
+                                       --no-recursive              Disable recursive scanning (default: true)
   inspect <targetDir> [options]      Inspect video metadata
                                        --min-duration=<mins>
                                        --min-height=<pixels>
@@ -112,6 +113,8 @@ async function main() {
             const options = {};
             args.slice(3).forEach(arg => {
                 if (arg === '--dry-run') options.dryRun = true;
+                if (arg === '--recursive') options.recursive = true;
+                if (arg === '--no-recursive') options.recursive = false;
             });
 
             const params = { sourceDir: src, outputDir: out, options };

@@ -6,7 +6,8 @@
         "sourceDir": "./input",
         "outputDir": "./output",
         "options": {
-          "dryRun": true
+          "dryRun": true,
+          "recursive": true
         }
       },
       {

@@ -28,7 +28,7 @@ The project adheres to a modular, decoupled architecture, separating the core ut
 The library exposes a single entry point via `src/index.js`. 
 
 ### `convert <sourceDir> <outputDir>`
-Scans the source directory and transpiles videos.
+Scans the source directory and transpiles videos. By default, it scans recursively but outputs all files to a single flat level in the output directory.
 - Switches to `libx265` (HEVC) for >720p, otherwise `libx264` (AVC).
 - Detects legacy audio (like `pcm_u8`) and transpiles to `aac` to prevent MP4 multiplexing failures.
 - Recursively maps stream-level EXIF data (e.g. `DateTime`, `Make`, `Model`) into the output MP4 format metadata.
@@ -38,6 +38,7 @@ Scans the source directory and transpiles videos.
 
 **Options:**
 - `--dry-run`: Log actions and estimate space savings without creating output files or directories.
+- `--no-recursive`: Disable recursive scanning (Scans recursively by default).
 
 ```bash
 node src/index.js convert ./test/sourceTest ./test/outputTest
