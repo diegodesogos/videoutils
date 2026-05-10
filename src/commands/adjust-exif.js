@@ -11,17 +11,23 @@ const {
     shouldAdjustDate
 } = require('../utils/date');
 
-async function adjustExifCommand(targetDir, options = {}) {
+async function adjustExifCommand(targetDirOrFile, options = {}) {
     const { compareDate, dryRun, syncFS } = options;
-    const dir = path.resolve(targetDir);
+    const target = path.resolve(targetDirOrFile);
 
-    if (!fs.existsSync(dir)) {
-        console.error(`Error: Folder not found at ${dir}`);
+    if (!fs.existsSync(target)) {
+        console.error(`Error: Not found at ${target}`);
         return;
     }
 
-    const files = fs.readdirSync(dir).filter(isVideoFile);
-    console.log(`Scanning folder: ${dir}`);
+    const targetStat = fs.statSync(target);
+    const isFile = targetStat.isFile();
+    const dir = isFile ? path.dirname(target) : target;
+    const files = isFile 
+        ? (isVideoFile(target) ? [path.basename(target)] : [])
+        : fs.readdirSync(dir).filter(isVideoFile);
+
+    console.log(`Scanning: ${target} (isFile: ${isFile})`);
     if (compareDate) console.log(`Filter Mode: ${compareDate}\n`);
 
     let scannedCount = files.length;
@@ -146,13 +152,13 @@ async function adjustExifCommand(targetDir, options = {}) {
 }
 
 function validate(params) {
-    const { targetDir, options } = params;
+    const { targetDirOrFile, options } = params;
     const errors = [];
 
-    if (!targetDir) {
-        errors.push('Missing "targetDir"');
-    } else if (!fs.existsSync(path.resolve(targetDir))) {
-        errors.push(`targetDir not found: ${targetDir}`);
+    if (!targetDirOrFile) {
+        errors.push('Missing "targetDirOrFile"');
+    } else if (!fs.existsSync(path.resolve(targetDirOrFile))) {
+        errors.push(`Target not found: ${targetDirOrFile}`);
     }
 
     if (options) {

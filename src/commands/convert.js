@@ -6,22 +6,27 @@ const { getMetadata } = require('../utils/metadata');
 const { extractDateFromTags, formatFfmpegDate, restoreFileDates } = require('../utils/date');
 const { formatSize } = require('../utils/size');
 
-function convertCommand(sourceDir, outputDir, options = {}) {
+function convertCommand(sourceDirOrFile, outputDir, options = {}) {
     const { dryRun, recursive = true } = options;
-    const src = path.resolve(sourceDir);
+    const src = path.resolve(sourceDirOrFile);
     const out = path.resolve(outputDir);
 
     if (!fs.existsSync(src)) {
-        console.error(`Source directory not found: ${src}`);
+        console.error(`Source not found: ${src}`);
         return;
     }
     if (!fs.existsSync(out) && !dryRun) {
         fs.mkdirSync(out, { recursive: true });
     }
 
-    const files = fs.readdirSync(src, { recursive })
-        .filter(file => isVideoFile(file) && fs.statSync(path.join(src, file)).isFile());
-    console.log(`Scanning: ${src} (recursive: ${recursive})`);
+    const srcStat = fs.statSync(src);
+    const isFile = srcStat.isFile();
+    const baseSrc = isFile ? path.dirname(src) : src;
+    const files = isFile 
+        ? (isVideoFile(src) ? [path.basename(src)] : [])
+        : fs.readdirSync(src, { recursive }).filter(file => isVideoFile(file) && fs.statSync(path.join(src, file)).isFile());
+
+    console.log(`Scanning: ${src} (isFile: ${isFile}, recursive: ${recursive})`);
 
     let scannedCount = files.length;
     let processedCount = 0;
@@ -32,7 +37,7 @@ function convertCommand(sourceDir, outputDir, options = {}) {
 
     async function convertVideo(file, currentIndex, totalFiles) {
         return new Promise((resolve, reject) => {
-            const filePath = path.join(src, file);
+            const filePath = path.join(baseSrc, file);
             const outputFilePath = getOutputFilePath(file, out);
             const tempFilePath = getTempFilePath(outputFilePath);
 
@@ -147,13 +152,13 @@ function convertCommand(sourceDir, outputDir, options = {}) {
 }
 
 function validate(params) {
-    const { sourceDir, outputDir, options } = params;
+    const { sourceDirOrFile, outputDir, options } = params;
     const errors = [];
 
-    if (!sourceDir) {
-        errors.push('Missing "sourceDir"');
-    } else if (!fs.existsSync(path.resolve(sourceDir))) {
-        errors.push(`sourceDir not found: ${sourceDir}`);
+    if (!sourceDirOrFile) {
+        errors.push('Missing "sourceDirOrFile"');
+    } else if (!fs.existsSync(path.resolve(sourceDirOrFile))) {
+        errors.push(`Source not found: ${sourceDirOrFile}`);
     }
 
     if (!outputDir) {

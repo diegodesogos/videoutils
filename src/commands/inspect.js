@@ -4,24 +4,28 @@ const { isVideoFile } = require('../utils/file');
 const { getMetadata } = require('../utils/metadata');
 const { matchesFilters } = require('../utils/filter');
 
-function inspectCommand(targetDir, options = {}) {
+function inspectCommand(targetDirOrFile, options = {}) {
     const { minDuration, minHeight, minResolution } = options;
-    const absolutePath = path.resolve(targetDir);
+    const target = path.resolve(targetDirOrFile);
     
-    if (!fs.existsSync(absolutePath)) {
-        console.error(`Error: Folder not found at ${absolutePath}`);
+    if (!fs.existsSync(target)) {
+        console.error(`Error: Not found at ${target}`);
         return;
     }
 
-    const files = fs.readdirSync(absolutePath);
-    console.log(`Scanning: ${absolutePath}\n`);
+    const targetStat = fs.statSync(target);
+    const isFile = targetStat.isFile();
+    const dir = isFile ? path.dirname(target) : target;
+    const files = isFile 
+        ? (isVideoFile(target) ? [path.basename(target)] : [])
+        : fs.readdirSync(dir).filter(isVideoFile);
+
+    console.log(`Scanning: ${target} (isFile: ${isFile})\n`);
 
     let foundCount = 0;
 
     files.forEach(file => {
-        if (!isVideoFile(file)) return;
-
-        const filePath = path.join(absolutePath, file);
+        const filePath = path.join(dir, file);
         const meta = getMetadata(filePath);
         if (!meta) return;
 
@@ -49,13 +53,13 @@ function inspectCommand(targetDir, options = {}) {
 }
 
 function validate(params) {
-    const { targetDir, options } = params;
+    const { targetDirOrFile, options } = params;
     const errors = [];
 
-    if (!targetDir) {
-        errors.push('Missing "targetDir"');
-    } else if (!fs.existsSync(path.resolve(targetDir))) {
-        errors.push(`targetDir not found: ${targetDir}`);
+    if (!targetDirOrFile) {
+        errors.push('Missing "targetDirOrFile"');
+    } else if (!fs.existsSync(path.resolve(targetDirOrFile))) {
+        errors.push(`Target not found: ${targetDirOrFile}`);
     }
 
     if (options) {

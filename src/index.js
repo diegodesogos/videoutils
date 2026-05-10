@@ -19,14 +19,14 @@ Usage:
   node src/index.js --profile=<name>
 
 Commands:
-  convert <sourceDir> <outputDir> [options] Convert videos (HEVC/AVC) and preserve metadata
+  convert <sourceDirOrFile> <outputDir> [options] Convert videos (HEVC/AVC) and preserve metadata
                                        --dry-run                   Log actions without modifying files
                                        --no-recursive              Disable recursive scanning (default: true)
-  inspect <targetDir> [options]      Inspect video metadata
+  inspect <targetDirOrFile> [options]      Inspect video metadata
                                        --min-duration=<mins>
                                        --min-height=<pixels>
                                        --min-resolution=<width>x<height>
-  adjust-exif <targetDir> [options]  Adjust EXIF and OS dates based on filename
+  adjust-exif <targetDirOrFile> [options]  Adjust EXIF and OS dates based on filename
                                        --compareDate=distinct      Only if dates differ
                                        --compareDate=fileNameNewer Only if filename date is newer
                                        --compareDate=fileNameOlder Only if metadata date is newer
@@ -38,8 +38,11 @@ Profiles:
 
 Examples:
   node src/index.js convert ./source ./output
+  node src/index.js convert ./source/video.mp4 ./output
   node src/index.js inspect ./output --min-height=720
+  node src/index.js inspect ./output/video.mp4
   node src/index.js adjust-exif ./output --compareDate=distinct
+  node src/index.js adjust-exif ./output/video.mp4
   node src/index.js --profile=daily-sync
     `);
 }
@@ -64,14 +67,14 @@ async function runProfile(profileName) {
         try {
             switch (step.command) {
                 case 'convert':
-                    await convertCommand(step.sourceDir, step.outputDir, step.options || {});
+                    await convertCommand(step.sourceDirOrFile, step.outputDir, step.options || {});
                     break;
                 case 'inspect':
                     // inspectCommand is currently synchronous, but we await it for consistency
-                    await inspectCommand(step.targetDir, step.options || {});
+                    await inspectCommand(step.targetDirOrFile, step.options || {});
                     break;
                 case 'adjust-exif':
-                    await adjustExifCommand(step.targetDir, step.options || {});
+                    await adjustExifCommand(step.targetDirOrFile, step.options || {});
                     break;
                 default:
                     console.error(`Error: Unknown command "${step.command}" in profile.`);
@@ -117,7 +120,7 @@ async function main() {
                 if (arg === '--no-recursive') options.recursive = false;
             });
 
-            const params = { sourceDir: src, outputDir: out, options };
+            const params = { sourceDirOrFile: src, outputDir: out, options };
             const errors = convertCommand.validate(params);
             if (errors.length > 0) {
                 console.error(`Validation errors:\n- ${errors.join('\n- ')}`);
@@ -136,7 +139,7 @@ async function main() {
                 if (arg.startsWith('--min-resolution=')) options.minResolution = arg.split('=')[1];
             });
 
-            const params = { targetDir: target, options };
+            const params = { targetDirOrFile: target, options };
             const errors = inspectCommand.validate(params);
             if (errors.length > 0) {
                 console.error(`Validation errors:\n- ${errors.join('\n- ')}`);
@@ -155,7 +158,7 @@ async function main() {
                 if (arg.startsWith('--compareDate=')) options.compareDate = arg.split('=')[1];
             });
 
-            const params = { targetDir: target, options };
+            const params = { targetDirOrFile: target, options };
             const errors = adjustExifCommand.validate(params);
             if (errors.length > 0) {
                 console.error(`Validation errors:\n- ${errors.join('\n- ')}`);

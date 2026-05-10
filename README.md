@@ -27,8 +27,8 @@ The project adheres to a modular, decoupled architecture, separating the core ut
 
 The library exposes a single entry point via `src/index.js`. 
 
-### `convert <sourceDir> <outputDir>`
-Scans the source directory and transpiles videos. By default, it scans recursively but outputs all files to a single flat level in the output directory.
+### `convert <sourceDirOrFile> <outputDir>`
+Scans the source directory or a single file and transpiles videos. By default, it scans recursively if a directory is provided, but outputs all files to a single flat level in the output directory.
 - Switches to `libx265` (HEVC) for >720p, otherwise `libx264` (AVC).
 - Detects legacy audio (like `pcm_u8`) and transpiles to `aac` to prevent MP4 multiplexing failures.
 - Recursively maps stream-level EXIF data (e.g. `DateTime`, `Make`, `Model`) into the output MP4 format metadata.
@@ -41,11 +41,15 @@ Scans the source directory and transpiles videos. By default, it scans recursive
 - `--no-recursive`: Disable recursive scanning (Scans recursively by default).
 
 ```bash
+# Directory processing
 node src/index.js convert ./test/sourceTest ./test/outputTest
+
+# Single file processing
+node src/index.js convert ./test/sourceTest/video.mp4 ./test/outputTest
 ```
 
-### `adjust-exif <targetDir> [options]`
-Extracts the date and time strings embedded directly within filenames (e.g. `2007-12-07_192638.mp4`).
+### `adjust-exif <targetDirOrFile> [options]`
+Extracts the date and time strings embedded directly within filenames of all videos in a directory or a single file.
 - Utilizes `ffmpeg -c copy` to inject a newly formatted ISO-8601 `creation_time` directly into the container header without re-encoding the stream.
 - Re-aligns OS `birthtime` and `mtime` to match.
 - Designed to fallback to the furthest-right date sequence if multiple dates exist in the string.
@@ -58,11 +62,15 @@ Extracts the date and time strings embedded directly within filenames (e.g. `200
 - `--dry-run`: Log actions without modifying any files. Useful for testing comparison filters.
 
 ```bash
+# Directory processing
 node src/index.js adjust-exif ./test/outputTest
+
+# Single file processing
+node src/index.js adjust-exif ./test/outputTest/video.mp4
 ```
 
-### `inspect <targetDir> [options]`
-Iterates through a directory, spawning `ffprobe` to pull and summarize video resolution, duration, OS timestamps, and raw internal format/stream EXIF tags.
+### `inspect <targetDirOrFile> [options]`
+Iterates through a directory or a single file, spawning `ffprobe` to pull and summarize video resolution, duration, OS timestamps, and raw internal format/stream EXIF tags.
 
 **Options:**
 - `--min-duration=<mins>`
@@ -70,7 +78,11 @@ Iterates through a directory, spawning `ffprobe` to pull and summarize video res
 - `--min-resolution=<width>x<height>` (or single number for width)
 
 ```bash
+# Directory processing
 node src/index.js inspect ./test/sourceTest --min-height=720
+
+# Single file processing
+node src/index.js inspect ./test/sourceTest/video.mp4
 ```
 
 ### Profiles
@@ -94,18 +106,18 @@ The CLI looks for a `video-utils.config.json` file in the root of your project. 
     "daily-sync": [
       {
         "command": "convert",
-        "sourceDir": "./input",
+        "sourceDirOrFile": "./input",
         "outputDir": "./output",
-        "options": { "dryRun": false }
+        "options": { "dryRun": false, "recursive": true }
       },
       {
         "command": "adjust-exif",
-        "targetDir": "./output",
+        "targetDirOrFile": "./output",
         "options": { "compareDate": "distinct", "syncFS": true }
       },
       {
         "command": "inspect",
-        "targetDir": "./output",
+        "targetDirOrFile": "./output",
         "options": { "minHeight": 720 }
       }
     ]

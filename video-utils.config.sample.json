@@ -3,7 +3,7 @@
     "sample-workflow": [
       {
         "command": "convert",
-        "sourceDir": "./input",
+        "sourceDirOrFile": "./input",
         "outputDir": "./output",
         "options": {
           "dryRun": true,
@@ -12,7 +12,7 @@
       },
       {
         "command": "adjust-exif",
-        "targetDir": "./output",
+        "targetDirOrFile": "./output",
         "options": {
           "compareDate": "distinct",
           "syncFS": true,
@@ -21,7 +21,7 @@
       },
       {
         "command": "inspect",
-        "targetDir": "./output",
+        "targetDirOrFile": "./output",
         "options": {
           "minHeight": 720
         }
