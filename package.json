@@ -11,7 +11,8 @@
     "inspect": "node ./src/index.js inspect",
     "convert": "node ./src/index.js convert",
     "adjust-exif": "node ./src/index.js adjust-exif",
-    "profile": "node ./src/index.js --profile"
+    "profile": "node ./src/index.js --profile",
+    "default": "node ./src/index.js --profile standard"
   },
   "dependencies": {
     "fluent-ffmpeg": "^2.1.2"
