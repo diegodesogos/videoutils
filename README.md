@@ -34,15 +34,15 @@ Scans the source directory or a single file and transpiles videos. By default, i
 - Detects legacy audio (like `pcm_u8`) and transpiles to `aac` to prevent MP4 multiplexing failures.
 - Recursively maps stream-level EXIF data (e.g. `DateTime`, `Make`, `Model`) into the output MP4 format metadata.
 - Applies `fs.utimesSync` and macOS `SetFile` to replicate identical OS modification/birth timestamps on the output.
-- Automatically infers and corrects the Display Aspect Ratio (DAR) based on the file's exact resolution to prevent squished pixels, unless manually overridden.
+- Leaves Display Aspect Ratio (DAR) untouched by default, allowing you to explicitly override it or dynamically infer it via GCD mapping.
 
 - Calculates and displays a comprehensive **Space Saving Summary** (Actual vs Estimated in dry-run).
 
 **Options:**
 - `--dry-run`: Log actions and estimate space savings without creating output files or directories.
 - `--no-recursive`: Disable recursive scanning (Scans recursively by default).
-- `--aspectRatio=<ratio>`: Manually override the inferred video aspect ratio (e.g., `16:9`, `4:3`). By default, DAR is inferred via resolution GCD to ensure 1:1 square pixel mapping.
-
+- `--aspectRatio=<ratio>`: The aspect ratio to force on the container (e.g. `16:9`).
+- `--aspectRatio=default`: Automatically calculates and infers the correct Display Aspect Ratio (DAR) based on the exact pixel dimensions (using GCD).
 ```bash
 # Directory processing
 node src/index.js convert ./test/sourceTest ./test/outputTest

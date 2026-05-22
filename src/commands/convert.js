@@ -62,7 +62,7 @@ function convertCommand(sourceDirOrFile, outputDir, options = {}) {
             const isHevc = (width >= 1280 || height >= 720);
 
             let finalAspectRatio = aspectRatio;
-            if (!finalAspectRatio && width > 0 && height > 0) {
+            if (aspectRatio === 'default' && width > 0 && height > 0) {
                 const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
                 const divisor = gcd(width, height);
                 finalAspectRatio = `${width / divisor}:${height / divisor}`;
@@ -107,7 +107,7 @@ function convertCommand(sourceDirOrFile, outputDir, options = {}) {
                 metadataOptions.push('-metadata', `creation_time=${creationTime}`);
             }
             if (meta.tags.make || meta.tags.Make) metadataOptions.push('-metadata', `make="${meta.tags.make || meta.tags.Make}"`);
-            if (finalAspectRatio) {
+            if (finalAspectRatio && finalAspectRatio !== 'default') {
                 metadataOptions.push('-aspect', finalAspectRatio);
             }
 
@@ -193,8 +193,8 @@ function validate(params) {
             if (options.aspectRatio !== undefined) {
                 if (typeof options.aspectRatio !== 'string') {
                     errors.push('"aspectRatio" must be a string');
-                } else if (!/^\d+:\d+$/.test(options.aspectRatio)) {
-                    errors.push(`Invalid "aspectRatio" format: "${options.aspectRatio}". Valid format is "W:H" (e.g., "16:9", "4:3").`);
+                } else if (options.aspectRatio !== 'default' && !/^\d+:\d+$/.test(options.aspectRatio)) {
+                    errors.push(`Invalid "aspectRatio" format: "${options.aspectRatio}". Valid format is "W:H" (e.g., "16:9") or "default".`);
                 }
             }
         }

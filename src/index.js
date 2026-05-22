@@ -23,7 +23,7 @@ Commands:
   convert <sourceDirOrFile> <outputDir> [options] Convert videos (HEVC/AVC) and preserve metadata
                                        --dry-run                   Log actions without modifying files
                                        --no-recursive              Disable recursive scanning (default: true)
-                                       --aspectRatio=<ratio>       Override inferred aspect ratio (e.g., 16:9, 4:3). Default: Inferred from resolution.
+                                       --aspectRatio=<ratio>       Override aspect ratio (e.g., 16:9, default). Not applied by default.
   inspect <targetDirOrFile> [options]      Inspect video metadata
                                        --min-duration=<mins>
                                        --min-height=<pixels>
