@@ -22,6 +22,7 @@ Commands:
   convert <sourceDirOrFile> <outputDir> [options] Convert videos (HEVC/AVC) and preserve metadata
                                        --dry-run                   Log actions without modifying files
                                        --no-recursive              Disable recursive scanning (default: true)
+                                       --aspectRatio=<ratio>       Override inferred aspect ratio (e.g., 16:9, 4:3). Default: Inferred from resolution.
   inspect <targetDirOrFile> [options]      Inspect video metadata
                                        --min-duration=<mins>
                                        --min-height=<pixels>
@@ -118,6 +119,7 @@ async function main() {
                 if (arg === '--dry-run') options.dryRun = true;
                 if (arg === '--recursive') options.recursive = true;
                 if (arg === '--no-recursive') options.recursive = false;
+                if (arg.startsWith('--aspectRatio=')) options.aspectRatio = arg.split('=')[1];
             });
 
             const params = { sourceDirOrFile: src, outputDir: out, options };

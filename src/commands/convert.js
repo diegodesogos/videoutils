@@ -7,7 +7,7 @@ const { extractDateFromTags, formatFfmpegDate, restoreFileDates } = require('../
 const { formatSize } = require('../utils/size');
 
 function convertCommand(sourceDirOrFile, outputDir, options = {}) {
-    const { dryRun, recursive = true } = options;
+    const { dryRun, recursive = true, aspectRatio } = options;
     const src = path.resolve(sourceDirOrFile);
     const out = path.resolve(outputDir);
 
@@ -61,6 +61,13 @@ function convertCommand(sourceDirOrFile, outputDir, options = {}) {
             const height = meta.height || 0;
             const isHevc = (width >= 1280 || height >= 720);
 
+            let finalAspectRatio = aspectRatio;
+            if (!finalAspectRatio && width > 0 && height > 0) {
+                const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
+                const divisor = gcd(width, height);
+                finalAspectRatio = `${width / divisor}:${height / divisor}`;
+            }
+
             if (dryRun) {
                 console.log(`[${currentIndex}/${totalFiles}] [DRY RUN] Would convert: ${file} -> ${outputFilePath} (${isHevc ? 'HEVC' : 'AVC'})`);
                 // Theoretical savings: HEVC ~60% reduction, AVC ~40% reduction
@@ -100,7 +107,9 @@ function convertCommand(sourceDirOrFile, outputDir, options = {}) {
                 metadataOptions.push('-metadata', `creation_time=${creationTime}`);
             }
             if (meta.tags.make || meta.tags.Make) metadataOptions.push('-metadata', `make="${meta.tags.make || meta.tags.Make}"`);
-            if (meta.tags.model || meta.tags.Model) metadataOptions.push('-metadata', `model="${meta.tags.model || meta.tags.Model}"`);
+            if (finalAspectRatio) {
+                metadataOptions.push('-aspect', finalAspectRatio);
+            }
 
             command.outputOptions(metadataOptions);
 
@@ -169,7 +178,7 @@ function validate(params) {
         if (typeof options !== 'object') {
             errors.push('"options" must be an object');
         } else {
-            const validOptions = ['dryRun', 'recursive'];
+            const validOptions = ['dryRun', 'recursive', 'aspectRatio'];
             Object.keys(options).forEach(key => {
                 if (!validOptions.includes(key)) {
                     errors.push(`Unknown option: "${key}"`);
@@ -180,6 +189,9 @@ function validate(params) {
             }
             if (options.recursive !== undefined && typeof options.recursive !== 'boolean') {
                 errors.push('"recursive" must be a boolean');
+            }
+            if (options.aspectRatio !== undefined && typeof options.aspectRatio !== 'string') {
+                errors.push('"aspectRatio" must be a string');
             }
         }
     }
