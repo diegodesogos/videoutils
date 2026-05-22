@@ -12,7 +12,8 @@ The project adheres to a modular, decoupled architecture, separating the core ut
 │   ├── commands/                 # Command controllers
 │   │   ├── adjust-exif.js        # Modifies EXIF/OS dates via filename extraction
 │   │   ├── convert.js            # Video codec conversion & metadata mapping
-│   │   └── inspect.js            # Metadata extraction and console reporting
+│   │   ├── inspect.js            # Metadata extraction and console reporting
+│   │   └── remux.js              # In-place lossless stream editing (e.g. DAR)
 │   └── utils/                    # Shared core business logic
 │       ├── date.js               # Date/time regex extraction and OS timestamp logic
 │       ├── file.js               # FS path resolution and validation
@@ -88,6 +89,26 @@ node src/index.js inspect ./test/sourceTest --min-height=720
 
 # Single file processing
 node src/index.js inspect ./test/sourceTest/video.mp4
+```
+
+### `remux <targetDirOrFile> [options]`
+Iterates through a directory or a single file to losslessly modify stream metadata in-place (such as Display Aspect Ratio).
+- Uses `ffmpeg -c copy` to completely bypass video and audio re-encoding, ensuring 100% preservation of original quality.
+- Safely writes to a temporary file before overwriting the original file.
+- Re-applies `fs.utimesSync` to preserve the original OS creation and modification timestamps.
+
+**Options:**
+- `--aspectRatio=<ratio>`: The aspect ratio to force on the container (e.g. `16:9`).
+- `--aspectRatio=default`: Automatically calculates and infers the correct Display Aspect Ratio (DAR) based on the exact pixel dimensions (using GCD).
+- `--no-recursive`: Disable recursive scanning (Scans recursively by default).
+- `--dry-run`: Log actions without modifying any files.
+
+```bash
+# Directory processing (infer from pixels)
+node src/index.js remux ./test/sourceTest --aspectRatio=default
+
+# Single file processing
+node src/index.js remux ./test/sourceTest/video.mp4 --aspectRatio=16:9
 ```
 
 ### Profiles

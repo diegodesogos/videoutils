@@ -5,6 +5,7 @@ const path = require('path');
 const convertCommand = require('./commands/convert');
 const inspectCommand = require('./commands/inspect');
 const adjustExifCommand = require('./commands/adjust-exif');
+const remuxCommand = require('./commands/remux');
 const { loadConfig, getProfile, validateProfile } = require('./utils/profile');
 
 const args = process.argv.slice(2);
@@ -33,6 +34,10 @@ Commands:
                                        --compareDate=fileNameOlder Only if metadata date is newer
                                        --syncFS                    One-way sync EXIF date to file system dates
                                        --dry-run                   Log actions without modifying files
+  remux <targetDirOrFile> [options]        Remux videos in-place to edit stream data losslessly
+                                       --dry-run                   Log actions without modifying files
+                                       --no-recursive              Disable recursive scanning (default: true)
+                                       --aspectRatio=<ratio>       Override aspect ratio (e.g., 16:9, default).
 
 Profiles:
   --profile=<name>                  Run a preconfigured chain of commands from video-utils.config.json
@@ -44,6 +49,8 @@ Examples:
   node src/index.js inspect ./output/video.mp4
   node src/index.js adjust-exif ./output --compareDate=distinct
   node src/index.js adjust-exif ./output/video.mp4
+  node src/index.js remux ./output --aspectRatio=16:9
+  node src/index.js remux ./output/video.mp4 --aspectRatio=default
   node src/index.js --profile=daily-sync
     `);
 }
@@ -76,6 +83,9 @@ async function runProfile(profileName) {
                     break;
                 case 'adjust-exif':
                     await adjustExifCommand(step.targetDirOrFile, step.options || {});
+                    break;
+                case 'remux':
+                    await remuxCommand(step.targetDirOrFile, step.options || {});
                     break;
                 default:
                     console.error(`Error: Unknown command "${step.command}" in profile.`);
@@ -168,6 +178,26 @@ async function main() {
             }
 
             await adjustExifCommand(target, options);
+            break;
+        }
+        case 'remux': {
+            const target = args[1];
+            const options = {};
+            args.slice(2).forEach(arg => {
+                if (arg === '--dry-run') options.dryRun = true;
+                if (arg === '--recursive') options.recursive = true;
+                if (arg === '--no-recursive') options.recursive = false;
+                if (arg.startsWith('--aspectRatio=')) options.aspectRatio = arg.split('=')[1];
+            });
+
+            const params = { targetDirOrFile: target, options };
+            const errors = remuxCommand.validate(params);
+            if (errors.length > 0) {
+                console.error(`Validation errors:\n- ${errors.join('\n- ')}`);
+                process.exit(1);
+            }
+
+            await remuxCommand(target, options);
             break;
         }
         default:

@@ -190,8 +190,12 @@ function validate(params) {
             if (options.recursive !== undefined && typeof options.recursive !== 'boolean') {
                 errors.push('"recursive" must be a boolean');
             }
-            if (options.aspectRatio !== undefined && typeof options.aspectRatio !== 'string') {
-                errors.push('"aspectRatio" must be a string');
+            if (options.aspectRatio !== undefined) {
+                if (typeof options.aspectRatio !== 'string') {
+                    errors.push('"aspectRatio" must be a string');
+                } else if (!/^\d+:\d+$/.test(options.aspectRatio)) {
+                    errors.push(`Invalid "aspectRatio" format: "${options.aspectRatio}". Valid format is "W:H" (e.g., "16:9", "4:3").`);
+                }
             }
         }
     }
