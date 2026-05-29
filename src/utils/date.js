@@ -2,7 +2,7 @@ const fs = require('fs');
 const { execSync } = require('child_process');
 
 function extractDateFromFilename(filename) {
-    const regex = /(?:^|[^0-9])((?:19|20)\d{2}[-]?\d{2}[-]?\d{2})(?:[_-](\d{6}))?(?=[^0-9]|$)/g;
+    const regex = /(?:^|[^0-9])((?:19|20)\d{2}[-]?\d{2}[-]?\d{2})(?:[_-](\d{2}[-:]?\d{2}[-:]?\d{2}))?(?=[^0-9]|$)/g;
     let match;
     let lastMatch = null;
 
@@ -13,7 +13,7 @@ function extractDateFromFilename(filename) {
     if (!lastMatch) return null;
 
     let dateStr = lastMatch[1].replace(/-/g, '');
-    let timeStr = lastMatch[2] || '120000';
+    let timeStr = lastMatch[2] ? lastMatch[2].replace(/[-:]/g, '') : '120000';
 
     const yyyy = dateStr.substring(0, 4);
     const mm = dateStr.substring(4, 6);
@@ -98,8 +98,8 @@ function shouldAdjustDate(filenameDate, metadataDate, mode, applyHeuristics = fa
             return { isMismatch: true, shouldAdjust: true, heuristicApplied: 'epoch-zero' };
         }
 
-        // Case 2: Midnight/Noon Precision
-        const isSuspicious = (d) => d.getUTCHours() % 12 === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0;
+        // Case 2: Exact Hour Precision (0 minutes and 0 seconds)
+        const isSuspicious = (d) => d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0;
         const diff = Math.abs(metadataDate.getTime() - filenameDate.getTime());
         
         if (diff < 86400000) { // less than a day

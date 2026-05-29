@@ -16,7 +16,8 @@
         "options": {
           "compareDate": "distinct",
           "syncFS": true,
-          "dryRun": true
+          "dryRun": true,
+          "applyHeuristics": true
         }
       },
       {

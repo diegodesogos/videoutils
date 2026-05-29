@@ -21,3 +21,8 @@ test('Date Utils - formatFfmpegDate formats legacy EXIF date correctly', () => {
     assert.strictEqual(formatFfmpegDate('2003:08:02 10:40:48'), '2003-08-02T10:40:48Z');
     assert.strictEqual(formatFfmpegDate('2003-08-02T10:40:48Z'), '2003-08-02T10:40:48Z');
 });
+
+test('Date Utils - extractDateFromFilename handles time separated by dashes', () => {
+    const res = extractDateFromFilename('2011-11-05_11-40-32-5 Bautismo Lorenzo Spina.mp4');
+    assert.strictEqual(res.iso, '2011-11-05T11:40:32Z');
+});

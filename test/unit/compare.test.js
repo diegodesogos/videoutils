@@ -38,7 +38,7 @@ test('Date Utils - shouldAdjustDate (comparison modes)', async (t) => {
 
     await t.test('Heuristics', async (t2) => {
         const preciseFile = new Date('2024-05-01T10:30:00Z');
-        const suspiciousFile = new Date('2024-05-01T12:00:00Z');
+        const suspiciousFile = new Date('2024-05-01T15:00:00Z'); // Exact hour, not midnight/noon
         const preciseMeta = new Date('2024-05-01T10:30:00Z');
         const suspiciousMeta = new Date('2024-05-01T12:00:00Z');
         const epochZeroMeta = new Date('1970-01-01T00:00:00Z');
@@ -49,23 +49,23 @@ test('Date Utils - shouldAdjustDate (comparison modes)', async (t) => {
             assert.deepStrictEqual(shouldAdjustDate(preciseFile, epochZeroMeta, 'distinct', true), { isMismatch: true, shouldAdjust: true, heuristicApplied: 'epoch-zero' });
         });
 
-        await t2.test('Midnight/Noon precision - filename suspicious, metadata precise (diff < 24h)', () => {
+        await t2.test('Exact Hour Precision - filename suspicious, metadata precise (diff < 24h)', () => {
             assert.deepStrictEqual(shouldAdjustDate(suspiciousFile, preciseMeta, 'distinct', true), { isMismatch: true, shouldAdjust: false, syncToMetadata: true, heuristicApplied: 'precise-metadata' });
         });
 
-        await t2.test('Midnight/Noon precision - filename precise, metadata suspicious (diff < 24h)', () => {
+        await t2.test('Exact Hour Precision - filename precise, metadata suspicious (diff < 24h)', () => {
             assert.deepStrictEqual(shouldAdjustDate(preciseFile, suspiciousMeta, 'distinct', true), { isMismatch: true, shouldAdjust: true, heuristicApplied: 'precise-filename' });
         });
 
-        await t2.test('Midnight/Noon precision - skipped if both precise', () => {
+        await t2.test('Exact Hour Precision - skipped if both precise', () => {
             assert.deepStrictEqual(shouldAdjustDate(preciseFile, preciseMeta, 'distinct', true), { isMismatch: false, shouldAdjust: false });
         });
         
-        await t2.test('Midnight/Noon precision - skipped if both suspicious', () => {
-            assert.deepStrictEqual(shouldAdjustDate(suspiciousFile, suspiciousMeta, 'distinct', true), { isMismatch: false, shouldAdjust: false });
+        await t2.test('Exact Hour Precision - skipped if both suspicious', () => {
+            assert.deepStrictEqual(shouldAdjustDate(suspiciousFile, suspiciousMeta, 'distinct', true), { isMismatch: true, shouldAdjust: true });
         });
 
-        await t2.test('Midnight/Noon precision - skipped if diff >= 24h', () => {
+        await t2.test('Exact Hour Precision - skipped if diff >= 24h', () => {
             assert.deepStrictEqual(shouldAdjustDate(diffMoreThanDayFile, preciseMeta, 'distinct', true), { isMismatch: true, shouldAdjust: true });
         });
     });
