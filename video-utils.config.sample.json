@@ -26,6 +26,13 @@
         "options": {
           "minHeight": 720
         }
+      },
+      {
+        "command": "remux",
+        "targetDirOrFile": "./output",
+        "options": {
+          "aspectRatio": "16:9"
+        }
       }
     ]
   }

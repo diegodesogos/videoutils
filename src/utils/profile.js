@@ -24,6 +24,7 @@ function getProfile(config, profileName) {
 const convertCommand = require('../commands/convert');
 const adjustExifCommand = require('../commands/adjust-exif');
 const inspectCommand = require('../commands/inspect');
+const remuxCommand = require('../commands/remux');
 
 function validateProfile(profile) {
     if (!Array.isArray(profile)) {
@@ -48,6 +49,9 @@ function validateProfile(profile) {
                 break;
             case 'inspect':
                 commandErrors = inspectCommand.validate(step);
+                break;
+            case 'remux':
+                commandErrors = remuxCommand.validate(step);
                 break;
             default:
                 errors.push(`Step ${stepNum}: Unknown command "${step.command}".`);

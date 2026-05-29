@@ -70,8 +70,16 @@ test('Profile Utility', async (t) => {
         assert.throws(() => validateProfile(invalidProfile), /Invalid compareDate value: "invalid"/);
     });
 
+    await t.test('validateProfile should catch invalid aspectRatio values for remux', () => {
+        const invalidProfile = [{ command: 'remux', targetDirOrFile: '.', options: { aspectRatio: 'invalid' } }];
+        assert.throws(() => validateProfile(invalidProfile), /Invalid "aspectRatio" format/);
+    });
+
     await t.test('validateProfile should pass for valid profile', () => {
-        const validProfile = [{ command: 'inspect', targetDirOrFile: '.' }];
+        const validProfile = [
+            { command: 'inspect', targetDirOrFile: '.' },
+            { command: 'remux', targetDirOrFile: '.', options: { aspectRatio: '16:9' } }
+        ];
         assert.doesNotThrow(() => validateProfile(validProfile));
     });
 });
