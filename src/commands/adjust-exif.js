@@ -12,7 +12,7 @@ const {
 } = require('../utils/date');
 
 async function adjustExifCommand(targetDirOrFile, options = {}) {
-    const { compareDate, dryRun, syncFS } = options;
+    const { compareDate } = options;
     const target = path.resolve(targetDirOrFile);
 
     if (!fs.existsSync(target)) {
@@ -20,133 +20,180 @@ async function adjustExifCommand(targetDirOrFile, options = {}) {
         return;
     }
 
-    const targetStat = fs.statSync(target);
-    const isFile = targetStat.isFile();
-    const dir = isFile ? path.dirname(target) : target;
-    const files = isFile 
-        ? (isVideoFile(target) ? [path.basename(target)] : [])
-        : fs.readdirSync(dir).filter(isVideoFile);
+    const { dir, files, isFile } = getTargetFiles(target);
 
     console.log(`Scanning: ${target} (isFile: ${isFile})`);
     if (compareDate) console.log(`Filter Mode: ${compareDate}\n`);
 
-    let scannedCount = files.length;
-    let processedCount = 0;
-    let skippedCount = 0;
-    let mismatchCount = 0;
-    let adjustedCount = 0;
-    let syncedCount = 0;
-    let currentIndex = 0;
+    const stats = {
+        scannedCount: files.length,
+        processedCount: 0,
+        skippedCount: 0,
+        mismatchCount: 0,
+        adjustedCount: 0,
+        syncedCount: 0,
+        heuristicResolvedCount: 0,
+        currentIndex: 0,
+    };
 
     for (const file of files) {
-        currentIndex++;
-        const filePath = path.join(dir, file);
-        const extracted = extractDateFromFilename(file);
-        
-        if (!extracted) {
-            console.log(`[${currentIndex}/${scannedCount}] Skipping: ${file} (No valid date found in filename)`);
-            skippedCount++;
-            continue;
-        }
+        stats.currentIndex++;
+        await processFile(file, dir, stats, options);
+    }
 
-        processedCount++;
-        const { iso, dateObj } = extracted;
-        
-        // Extract current metadata date
-        const meta = getMetadata(filePath);
-        const stat = fs.statSync(filePath);
-        let currentMetadataDate = extractDateFromTags(meta.tags, stat);
-        currentMetadataDate = formatFfmpegDate(currentMetadataDate);
-        
-        const filenameDateObj = dateObj;
-        const metaDateObj = currentMetadataDate ? new Date(currentMetadataDate) : null;
+    printSummary(stats, options);
+}
 
-        const { isMismatch, shouldAdjust } = shouldAdjustDate(filenameDateObj, metaDateObj, compareDate);
+function getTargetFiles(targetPath) {
+    const targetStat = fs.statSync(targetPath);
+    const isFile = targetStat.isFile();
+    const dir = isFile ? path.dirname(targetPath) : targetPath;
+    const files = isFile 
+        ? (isVideoFile(targetPath) ? [path.basename(targetPath)] : [])
+        : fs.readdirSync(dir).filter(isVideoFile);
+    
+    return { dir, files, isFile };
+}
 
-        if (shouldAdjust) mismatchCount++;
+async function processFile(file, dir, stats, options) {
+    const { compareDate, dryRun, applyHeuristics } = options;
+    const filePath = path.join(dir, file);
+    const extracted = extractDateFromFilename(file);
+    
+    if (!extracted) {
+        console.log(`[${stats.currentIndex}/${stats.scannedCount}] Skipping: ${file} (No valid date found in filename)`);
+        stats.skippedCount++;
+        return;
+    }
 
-        if (shouldAdjust) {
-            console.log(`[${currentIndex}/${scannedCount}] Mismatch found (Meeting criteria): ${file}`);
-            console.log(`  - Filename Date: ${iso}`);
-            console.log(`  - Metadata Date: ${currentMetadataDate || 'None'}`);
-        }
+    stats.processedCount++;
+    const { iso, dateObj: filenameDateObj } = extracted;
+    
+    // Extract current metadata date
+    const meta = getMetadata(filePath);
+    const stat = fs.statSync(filePath);
+    let currentMetadataDate = extractDateFromTags(meta.tags, stat);
+    currentMetadataDate = formatFfmpegDate(currentMetadataDate);
+    
+    const metaDateObj = currentMetadataDate ? new Date(currentMetadataDate) : null;
 
-        if (!shouldAdjust) {
-            let handled = false;
-            if (syncFS && metaDateObj) {
-                const isFsSynced = Math.abs(stat.mtime.getTime() - metaDateObj.getTime()) < 1000;
-                if (!isFsSynced) {
-                    handled = true;
-                    if (dryRun) {
-                        console.log(`[${currentIndex}/${scannedCount}] [DRY RUN] Would sync FS dates to Metadata Date: ${currentMetadataDate} for ${file}`);
-                    } else {
-                        console.log(`[${currentIndex}/${scannedCount}] Syncing FS dates to Metadata Date: ${currentMetadataDate} for ${file}`);
-                        restoreFileDates(filePath, metaDateObj, metaDateObj, metaDateObj);
-                        console.log(`  ✅ FS Synced.`);
-                    }
-                    syncedCount++;
-                }
-            }
-            if (!handled) {
-                console.log(`[${currentIndex}/${scannedCount}] OK (no changes needed): ${file}`);
-            }
-            continue;
-        }
+    const { isMismatch, shouldAdjust, syncToMetadata, heuristicApplied } = shouldAdjustDate(filenameDateObj, metaDateObj, compareDate, applyHeuristics);
 
+    if (shouldAdjust || syncToMetadata) stats.mismatchCount++;
+    if (heuristicApplied) stats.heuristicResolvedCount++;
+
+    if (shouldAdjust) {
+        console.log(`[${stats.currentIndex}/${stats.scannedCount}] Mismatch found (Meeting criteria): ${file}`);
+        if (heuristicApplied) console.log(`  - Heuristic applied: ${heuristicApplied}`);
+        console.log(`  - Filename Date: ${iso}`);
+        console.log(`  - Metadata Date: ${currentMetadataDate || 'None'}`);
+    }
+
+    if (!shouldAdjust) {
+        handleNoAdjust(file, filePath, currentMetadataDate, metaDateObj, stat, syncToMetadata, stats, options);
+        return;
+    }
+
+    if (dryRun) {
+        console.log(`[${stats.currentIndex}/${stats.scannedCount}] [DRY RUN] Would adjust: ${file} -> Target Date: ${iso}`);
+        stats.adjustedCount++;
+        return;
+    }
+
+    console.log(`[${stats.currentIndex}/${stats.scannedCount}] Adjusting: ${file} -> Target Date: ${iso}`);
+    stats.adjustedCount++;
+
+    await adjustExifWithFfmpeg(filePath, iso, stats);
+    restoreFileDates(filePath, filenameDateObj, filenameDateObj, filenameDateObj);
+    console.log(`  ✅ Done.`);
+}
+
+function handleNoAdjust(file, filePath, currentMetadataDate, metaDateObj, stat, syncToMetadata, stats, options) {
+    const { dryRun, syncFS } = options;
+    let handled = false;
+    
+    if (syncToMetadata) {
+        handled = true;
         if (dryRun) {
-            console.log(`[${currentIndex}/${scannedCount}] [DRY RUN] Would adjust: ${file} -> Target Date: ${iso}`);
-            adjustedCount++;
-            continue;
+            console.log(`[${stats.currentIndex}/${stats.scannedCount}] [DRY RUN] Would sync FS dates to precise Metadata Date: ${currentMetadataDate} for ${file}`);
+        } else {
+            console.log(`[${stats.currentIndex}/${stats.scannedCount}] Syncing FS dates to precise Metadata Date: ${currentMetadataDate} for ${file}`);
+            restoreFileDates(filePath, metaDateObj, metaDateObj, metaDateObj);
+            console.log(`  ✅ FS Synced.`);
         }
-
-        console.log(`[${currentIndex}/${scannedCount}] Adjusting: ${file} -> Target Date: ${iso}`);
-        adjustedCount++;
-
-        const tempPath = getTempFilePath(filePath);
-
-        await new Promise((resolve) => {
-            ffmpeg(filePath)
-                .outputOptions([
-                    '-c', 'copy',
-                    '-map', '0',
-                    '-metadata', `creation_time=${iso}`
-                ])
-                .on('progress', (p) => {
-                    if (p.percent) {
-                        process.stdout.write(`[${currentIndex}/${scannedCount}] Progress: ${Math.floor(p.percent)}% \r`);
-                    }
-                })
-                .on('end', () => {
-                    process.stdout.write(' '.repeat(50) + '\r'); // clear progress line
-                    resolve();
-                })
-                .on('error', (err) => {
-                    console.error(`\n  Error adjusting EXIF: ${err.message}`);
-                    resolve();
-                })
-                .save(tempPath);
-        });
-
-        if (fs.existsSync(tempPath)) {
-            fs.renameSync(tempPath, filePath);
+        stats.syncedCount++;
+    } else if (syncFS && metaDateObj) {
+        const isFsSynced = Math.abs(stat.mtime.getTime() - metaDateObj.getTime()) < 1000;
+        if (!isFsSynced) {
+            handled = true;
+            if (dryRun) {
+                console.log(`[${stats.currentIndex}/${stats.scannedCount}] [DRY RUN] Would sync FS dates to Metadata Date: ${currentMetadataDate} for ${file}`);
+            } else {
+                console.log(`[${stats.currentIndex}/${stats.scannedCount}] Syncing FS dates to Metadata Date: ${currentMetadataDate} for ${file}`);
+                restoreFileDates(filePath, metaDateObj, metaDateObj, metaDateObj);
+                console.log(`  ✅ FS Synced.`);
+            }
+            stats.syncedCount++;
         }
-
-        restoreFileDates(filePath, dateObj, dateObj, dateObj);
-        console.log(`  ✅ Done.`);
     }
+    
+    if (!handled) {
+        console.log(`[${stats.currentIndex}/${stats.scannedCount}] OK (no changes needed): ${file}`);
+    }
+}
 
+async function adjustExifWithFfmpeg(filePath, iso, stats) {
+    const tempPath = getTempFilePath(filePath);
+
+    await new Promise((resolve) => {
+        ffmpeg(filePath)
+            .outputOptions([
+                '-c', 'copy',
+                '-map', '0',
+                '-metadata', `creation_time=${iso}`
+            ])
+            .on('progress', (p) => {
+                if (p.percent) {
+                    process.stdout.write(`[${stats.currentIndex}/${stats.scannedCount}] Progress: ${Math.floor(p.percent)}% \r`);
+                }
+            })
+            .on('end', () => {
+                process.stdout.write(' '.repeat(50) + '\r'); // clear progress line
+                resolve();
+            })
+            .on('error', (err) => {
+                console.error(`\n  Error adjusting EXIF: ${err.message}`);
+                resolve();
+            })
+            .save(tempPath);
+    });
+
+    if (fs.existsSync(tempPath)) {
+        fs.renameSync(tempPath, filePath);
+    }
+}
+
+function printSummary(stats, options) {
+    const { applyHeuristics, compareDate, syncFS } = options;
+    
     console.log(`\nAdjustment Summary:`);
-    console.log(`- Total files scanned: ${scannedCount}`);
-    console.log(`- Files skipped (invalid filename): ${skippedCount}`);
-    console.log(`- Files processed (valid date): ${processedCount}`);
-    if (compareDate) {
-        console.log(`- Files matching filter '${compareDate}': ${mismatchCount}`);
-    } else {
-        console.log(`- Files with date mismatch: ${mismatchCount}`);
+    console.log(`- Total files scanned: ${stats.scannedCount}`);
+    console.log(`- Files skipped (invalid filename): ${stats.skippedCount}`);
+    console.log(`- Files processed (valid date): ${stats.processedCount}`);
+    
+    if (applyHeuristics) {
+        console.log(`- Files resolved by heuristics: ${stats.heuristicResolvedCount}`);
     }
-    console.log(`- Files adjusted (or would be adjusted): ${adjustedCount}`);
-    if (syncFS) {
-        console.log(`- Files with FS synced to EXIF (only): ${syncedCount}`);
+    if (compareDate) {
+        console.log(`- Files matching filter '${compareDate}': ${stats.mismatchCount}`);
+    } else {
+        console.log(`- Files with date mismatch: ${stats.mismatchCount}`);
+    }
+    
+    console.log(`- Files adjusted (or would be adjusted): ${stats.adjustedCount}`);
+    
+    if (syncFS || applyHeuristics) {
+        console.log(`- Files with FS synced to EXIF (only): ${stats.syncedCount}`);
     }
     console.log('\nAll operations finished.');
 }
@@ -165,7 +212,7 @@ function validate(params) {
         if (typeof options !== 'object') {
             errors.push('"options" must be an object');
         } else {
-            const validOptions = ['compareDate', 'syncFS', 'dryRun'];
+            const validOptions = ['compareDate', 'syncFS', 'dryRun', 'applyHeuristics'];
             const validCompareDateValues = ['distinct', 'fileNameNewer', 'fileNameOlder'];
 
             Object.keys(options).forEach(key => {
@@ -182,6 +229,9 @@ function validate(params) {
             }
             if (options.dryRun !== undefined && typeof options.dryRun !== 'boolean') {
                 errors.push('"dryRun" must be a boolean');
+            }
+            if (options.applyHeuristics !== undefined && typeof options.applyHeuristics !== 'boolean') {
+                errors.push('"applyHeuristics" must be a boolean');
             }
         }
     }

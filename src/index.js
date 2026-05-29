@@ -33,6 +33,7 @@ Commands:
                                        --compareDate=fileNameNewer Only if filename date is newer
                                        --compareDate=fileNameOlder Only if metadata date is newer
                                        --syncFS                    One-way sync EXIF date to file system dates
+                                       --applyHeuristics           Apply heuristics for epoch-zero and midnight/noon precision cases
                                        --dry-run                   Log actions without modifying files
   remux <targetDirOrFile> [options]        Remux videos in-place to edit stream data losslessly
                                        --dry-run                   Log actions without modifying files
@@ -167,6 +168,7 @@ async function main() {
             args.slice(2).forEach(arg => {
                 if (arg === '--dry-run') options.dryRun = true;
                 if (arg === '--syncFS') options.syncFS = true;
+                if (arg === '--applyHeuristics') options.applyHeuristics = true;
                 if (arg.startsWith('--compareDate=')) options.compareDate = arg.split('=')[1];
             });
 

@@ -65,6 +65,9 @@ Extracts the date and time strings embedded directly within filenames of all vid
 - `--compareDate=fileNameNewer`: Only adjust if the date extracted from the filename is more recent than the metadata.
 - `--compareDate=fileNameOlder`: Only adjust if the existing metadata date is more recent than the filename.
 - `--syncFS`: One-way sync. Ensures OS file system timestamps match the internal EXIF metadata, even if no metadata adjustment is required.
+- `--applyHeuristics`: Enables edge-case heuristics:
+  - **Epoch Zero Metadata:** If the existing metadata date is invalid (e.g. before year 1971), it unconditionally overwrites the EXIF with the filename date, ignoring `--compareDate` filters.
+  - **Midnight/Noon Precision:** If either the filename date or the metadata date is exactly midnight (`00:00:00`) or noon (`12:00:00`) and the time difference is less than 24 hours, the more precise date is preferred. If the metadata is the precise one, it prevents EXIF overwriting and selectively synchronizes only the OS file system dates.
 - `--dry-run`: Log actions without modifying any files. Useful for testing comparison filters.
 
 ```bash

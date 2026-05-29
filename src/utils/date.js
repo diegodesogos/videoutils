@@ -86,10 +86,35 @@ function restoreFileDates(filePath, atime, mtime, birthtime) {
  * @param {Date} filenameDate 
  * @param {Date} metadataDate 
  * @param {string} mode - 'distinct', 'fileNameNewer', 'fileNameOlder'
- * @returns {{ isMismatch: boolean, shouldAdjust: boolean }}
+ * @param {boolean} applyHeuristics - whether to apply edge-case heuristics
+ * @returns {{ isMismatch: boolean, shouldAdjust: boolean, syncToMetadata?: boolean, heuristicApplied?: string }}
  */
-function shouldAdjustDate(filenameDate, metadataDate, mode) {
+function shouldAdjustDate(filenameDate, metadataDate, mode, applyHeuristics = false) {
     if (!filenameDate) return { isMismatch: false, shouldAdjust: false };
+
+    if (applyHeuristics) {
+        // Case 1: Invalid/Epoch Zero metadata (there are no videos older than 1971) or Missing metadata
+        if (!metadataDate || metadataDate.getFullYear() < 1971) {
+            return { isMismatch: true, shouldAdjust: true, heuristicApplied: 'epoch-zero' };
+        }
+
+        // Case 2: Midnight/Noon Precision
+        const isSuspicious = (d) => d.getUTCHours() % 12 === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0;
+        const diff = Math.abs(metadataDate.getTime() - filenameDate.getTime());
+        
+        if (diff < 86400000) { // less than a day
+            const filenameSuspicious = isSuspicious(filenameDate);
+            const metadataSuspicious = isSuspicious(metadataDate);
+
+            if (filenameSuspicious && !metadataSuspicious) {
+                // Metadata date is more precise. Sync FS to metadata date, do not modify EXIF.
+                return { isMismatch: true, shouldAdjust: false, syncToMetadata: true, heuristicApplied: 'precise-metadata' };
+            } else if (!filenameSuspicious && metadataSuspicious) {
+                // Filename date is more precise. Modify EXIF to filename date.
+                return { isMismatch: true, shouldAdjust: true, heuristicApplied: 'precise-filename' };
+            }
+        }
+    }
 
     const isMismatch = !metadataDate || Math.abs(metadataDate.getTime() - filenameDate.getTime()) > 1000;
     
