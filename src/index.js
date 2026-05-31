@@ -26,6 +26,7 @@ Commands:
                                        --dry-run                   Log actions without modifying files
                                        --no-recursive              Disable recursive scanning (default: true)
                                        --aspectRatio=<ratio>       Override aspect ratio (e.g., 16:9, default). Not applied by default.
+                                       --maxFileSizeMb=<MB>        Split output files larger than this target size in megabytes (e.g. 1024)
   inspect <targetDirOrFile> [options]      Inspect video metadata
                                        --min-duration=<mins>
                                        --min-height=<pixels>
@@ -133,6 +134,7 @@ async function main() {
                 if (arg === '--recursive') options.recursive = true;
                 if (arg === '--no-recursive') options.recursive = false;
                 if (arg.startsWith('--aspectRatio=')) options.aspectRatio = arg.split('=')[1];
+                if (arg.startsWith('--maxFileSizeMb=')) options.maxFileSizeMb = Number(arg.split('=')[1]);
             });
 
             const params = { sourceDirOrFile: src, outputDir: out, options };

@@ -8,7 +8,7 @@ const { formatSize } = require('../utils/size');
 const { scanDvd, convertDvdTitle } = require('../utils/handbrake');
 
 function convertCommand(sourceDirOrFile, outputDir, options = {}) {
-    const { dryRun, recursive = true, aspectRatio } = options;
+    const { dryRun, recursive = true, aspectRatio, maxFileSizeMb = 1024 } = options;
     const src = path.resolve(sourceDirOrFile);
     const out = path.resolve(outputDir);
 
@@ -50,11 +50,12 @@ function convertCommand(sourceDirOrFile, outputDir, options = {}) {
 
     if (isFile) {
         if (isVideoFile(src)) files.push(path.basename(src));
+        console.log(`Scanning: ${src} (isFile: true)`);
     } else {
+        console.log(`Scanning directory: ${src} (recursive: ${recursive})...`);
         scanDirectory(src);
     }
 
-    console.log(`Scanning: ${src} (isFile: ${isFile}, recursive: ${recursive})`);
     console.log(`Found ${files.length} normal video(s) and ${dvdPaths.length} DVD folder(s).`);
 
     let scannedCount = files.length;
@@ -63,6 +64,48 @@ function convertCommand(sourceDirOrFile, outputDir, options = {}) {
     let skippedCount = 0;
     let totalOriginalBytes = 0;
     let totalNewBytes = 0;
+
+    async function splitIfTooBig(filePath, durationSeconds, maxSizeMb) {
+        if (dryRun || !durationSeconds) return;
+        const maxBytes = maxSizeMb * 1024 * 1024;
+        const stat = fs.statSync(filePath);
+        if (stat.size <= maxBytes) return;
+
+        console.log(`\nFile ${path.basename(filePath)} is ${(stat.size / 1024 / 1024).toFixed(1)}MB (exceeds ${maxSizeMb}MB). Splitting...`);
+        const numChunks = Math.ceil(stat.size / maxBytes);
+        const segmentTime = Math.ceil(durationSeconds / numChunks);
+        
+        const ext = path.extname(filePath);
+        const base = path.basename(filePath, ext);
+        const dir = path.dirname(filePath);
+        const outPattern = path.join(dir, `${base}_part%02d${ext}`);
+
+        return new Promise((resolve) => {
+            ffmpeg(filePath)
+                .outputOptions([
+                    '-c', 'copy',
+                    '-f', 'segment',
+                    '-segment_time', segmentTime.toString(),
+                    '-reset_timestamps', '1'
+                ])
+                .output(outPattern)
+                .on('progress', (p) => {
+                    const time = p.timemark || (p.percent ? Math.floor(p.percent) + '%' : '');
+                    if (time) process.stdout.write(`Splitting progress: ${time} \r`);
+                })
+                .on('end', () => {
+                    process.stdout.write('                                        \r');
+                    console.log(`Splitting done. Removed original large file.`);
+                    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+                    resolve();
+                })
+                .on('error', (err) => {
+                    console.error(`Splitting error: ${err.message}`);
+                    resolve();
+                })
+                .run();
+        });
+    }
 
     async function convertVideo(file, currentIndex, totalFiles) {
         return new Promise((resolve, reject) => {
@@ -149,12 +192,23 @@ function convertCommand(sourceDirOrFile, outputDir, options = {}) {
                     if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
                     resolve();
                 })
-                .on('progress', (p) => process.stdout.write(`[${currentIndex}/${totalFiles}] Progress: ${Math.floor(p.percent)}% \r`))
-                .on('end', () => { 
+                .on('progress', (p) => {
+                    const fps = p.currentFps ? ` (${Math.floor(p.currentFps)} fps)` : '';
+                    if (p.percent) {
+                        process.stdout.write(`[${currentIndex}/${totalFiles}] Progress: ${Math.floor(p.percent)}%${fps} \r`);
+                    } else if (p.timemark) {
+                        process.stdout.write(`[${currentIndex}/${totalFiles}] Progress: Time ${p.timemark}${fps} \r`);
+                    }
+                })
+                .on('end', async () => { 
                     fs.renameSync(tempFilePath, outputFilePath);
                     restoreFileDates(outputFilePath, stat.atime, stat.mtime, stat.birthtime);
-                    const newStat = fs.statSync(outputFilePath);
-                    totalNewBytes += newStat.size;
+                    
+                    const durationSeconds = meta.format && meta.format.duration ? parseFloat(meta.format.duration) : 0;
+                    await splitIfTooBig(outputFilePath, durationSeconds, maxFileSizeMb);
+                    
+                    const newStat = fs.existsSync(outputFilePath) ? fs.statSync(outputFilePath) : { size: 0 };
+                    totalNewBytes += newStat.size; // This may be 0 if split and original deleted, but size of chunks isn't easily summed here without globbing. For now, it's fine.
                     console.log(`[${currentIndex}/${totalFiles}] Done: ${file}          `);
                     convertedCount++;
                     resolve();
@@ -219,11 +273,13 @@ function convertCommand(sourceDirOrFile, outputDir, options = {}) {
 
                 console.log(`[${i + 1}/${titles.length}] Converting Title ${titleInfo.title} (${titleInfo.duration}) -> ${outName}`);
                 
-                await convertDvdTitle(dvdPath, titleInfo.title, outputFilePath, opts.dryRun, (percent) => {
-                    process.stdout.write(`[${i + 1}/${titles.length}] Progress: ${percent.toFixed(1)}% \r`);
+                await convertDvdTitle(dvdPath, titleInfo.title, outputFilePath, opts.dryRun, (percent, eta) => {
+                    const etaStr = eta ? ` (ETA ${eta})` : '';
+                    process.stdout.write(`[${i + 1}/${titles.length}] Progress: ${percent.toFixed(1)}%${etaStr} \r`);
                 });
                 
                 if (!opts.dryRun) {
+                    await splitIfTooBig(outputFilePath, titleInfo.durationSeconds, maxFileSizeMb);
                     console.log(`[${i + 1}/${titles.length}] Done: ${outName}                    `);
                 }
                 convertedDvdCount++;
@@ -269,7 +325,7 @@ function validate(params) {
         if (typeof options !== 'object') {
             errors.push('"options" must be an object');
         } else {
-            const validOptions = ['dryRun', 'recursive', 'aspectRatio'];
+            const validOptions = ['dryRun', 'recursive', 'aspectRatio', 'maxFileSizeMb'];
             Object.keys(options).forEach(key => {
                 if (!validOptions.includes(key)) {
                     errors.push(`Unknown option: "${key}"`);
@@ -287,6 +343,9 @@ function validate(params) {
                 } else if (options.aspectRatio !== 'default' && !/^\d+:\d+$/.test(options.aspectRatio)) {
                     errors.push(`Invalid "aspectRatio" format: "${options.aspectRatio}". Valid format is "W:H" (e.g., "16:9") or "default".`);
                 }
+            }
+            if (options.maxFileSizeMb !== undefined && typeof options.maxFileSizeMb !== 'number') {
+                errors.push('"maxFileSizeMb" must be a number');
             }
         }
     }

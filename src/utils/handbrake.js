@@ -13,11 +13,14 @@ function scanDvd(dvdPath) {
         const handbrake = child_process.spawn('HandBrakeCLI', ['--scan', '-t', '0', '-i', dvdPath]);
         
         let output = '';
+        const interval = setInterval(() => process.stdout.write('.'), 1000);
         
         handbrake.stdout.on('data', (data) => output += data.toString());
         handbrake.stderr.on('data', (data) => output += data.toString());
         
         handbrake.on('close', () => {
+            clearInterval(interval);
+            process.stdout.write('\n');
             // HandBrakeCLI often exits with non-zero code after a scan, which is normal.
             const titles = [];
             
@@ -87,12 +90,22 @@ function convertDvdTitle(dvdPath, titleNum, outputFilePath, dryRun = false, onPr
 
         const handbrake = child_process.spawn('HandBrakeCLI', args);
 
+        let stderrBuffer = '';
         handbrake.stderr.on('data', (data) => {
-            const output = data.toString();
+            stderrBuffer += data.toString();
             // HandBrakeCLI prints progress to stderr: "Encoding: task 1 of 1, 45.23 % (42.12 fps, avg 40.50 fps, ETA 00h02m10s)"
-            const progressMatch = output.match(/(\d+\.\d+)\s*%/);
-            if (progressMatch && onProgress) {
-                onProgress(parseFloat(progressMatch[1]));
+            const matches = [...stderrBuffer.matchAll(/(\d+\.\d+)\s*%(?:.*?(?:ETA\s+([\dhms]+)))?/g)];
+            if (matches.length > 0) {
+                const lastMatch = matches[matches.length - 1];
+                if (onProgress) {
+                    onProgress(parseFloat(lastMatch[1]), lastMatch[2]);
+                }
+                // Keep only the end of the buffer to prevent memory growth
+                stderrBuffer = stderrBuffer.slice(-200);
+            }
+            // If no match is found, keep buffer small
+            if (stderrBuffer.length > 1000) {
+                stderrBuffer = stderrBuffer.slice(-1000);
             }
         });
 

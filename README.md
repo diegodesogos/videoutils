@@ -75,20 +75,21 @@ The library exposes a single entry point via `src/index.js`.
 
 ### `convert <sourceDirOrFile> <outputDir>`
 Scans the source directory or a single file and transpiles videos. By default, it scans recursively if a directory is provided, but outputs all files to a single flat level in the output directory.
-- **DVD/VOB Directory Support**: Automatically detects DVD structures (containing `VIDEO_TS` or `VIDEO_TS.IFO`). When a DVD directory is detected, it utilizes `HandBrakeCLI` (required system dependency) to dynamically parse the DVD structure, filter out menu loops (under 10 seconds), and convert individual DVD titles sequentially into independent, optimized `.mp4` files (named `Title_01.mp4`, `Title_02.mp4`, etc.).
+- **DVD/VOB Directory Support**: Automatically detects DVD structures (containing `VIDEO_TS` or `VIDEO_TS.IFO`). When a DVD directory is detected, it utilizes `HandBrakeCLI` (required system dependency) to dynamically parse the DVD structure, filter out menu loops (under 10 seconds), and convert individual DVD titles sequentially into independent, optimized `.mp4` files (named `Title_01.mp4`, `Title_02.mp4`, etc.). If the output file exceeds `--maxFileSizeMb`, it is automatically split into smaller chunks (using fast lossless `ffmpeg` segmenting) to facilitate uploads to Google Photos. The progress tracking maintains a robust stream buffer to ensure smooth conversion metrics on long files.
 - Switches to `libx265` (HEVC) for >720p, otherwise `libx264` (AVC) for standard video files.
 - Detects legacy audio (like `pcm_u8`) and transpiles to `aac` to prevent MP4 multiplexing failures.
 - Recursively maps stream-level EXIF data (e.g. `DateTime`, `Make`, `Model`) into the output MP4 format metadata.
 - Applies `fs.utimesSync` and macOS `SetFile` to replicate identical OS modification/birth timestamps on the output.
 - Leaves Display Aspect Ratio (DAR) untouched by default, allowing you to explicitly override it or dynamically infer it via GCD mapping.
 
-- Calculates and displays a comprehensive **Space Saving Summary** (Actual vs Estimated in dry-run).
+- Calculates and displays a comprehensive **Space Summary** (Actual vs Estimated in dry-run).
 
 **Options:**
 - `--dry-run`: Log actions and estimate space savings without creating output files or directories.
 - `--no-recursive`: Disable recursive scanning (Scans recursively by default).
 - `--aspectRatio=<ratio>`: The aspect ratio to force on the container (e.g. `16:9`).
 - `--aspectRatio=default`: Automatically calculates and infers the correct Display Aspect Ratio (DAR) based on the exact pixel dimensions (using GCD).
+- `--maxFileSizeMb=<MB>`: Splits files larger than this target size in megabytes (e.g. `1024`). Defaults to `1024` (1 GB) for DVD conversions.
 ```bash
 # Directory processing
 node src/index.js convert ./test/sourceTest ./test/outputTest

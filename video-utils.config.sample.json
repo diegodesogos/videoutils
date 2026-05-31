@@ -41,7 +41,8 @@
         "sourceDirOrFile": "./input",
         "outputDir": "./output",
         "options": {
-          "dryRun": true
+          "dryRun": true,
+          "maxFileSizeMb": 1024
         }
       }
     ]
