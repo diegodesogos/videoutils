@@ -20,7 +20,9 @@ Usage:
   node src/index.js --profile=<name>
 
 Commands:
-  convert <sourceDirOrFile> <outputDir> [options] Convert videos (HEVC/AVC) and preserve metadata
+  convert <sourceDirOrFile> <outputDir> [options] Convert videos (HEVC/AVC) and preserve metadata.
+                                       Automatically detects DVD structures (VIDEO_TS) and uses HandBrakeCLI
+                                       to extract and encode individual titles.
                                        --dry-run                   Log actions without modifying files
                                        --no-recursive              Disable recursive scanning (default: true)
                                        --aspectRatio=<ratio>       Override aspect ratio (e.g., 16:9, default). Not applied by default.

@@ -5,6 +5,7 @@ const { isVideoFile, getOutputFilePath, getTempFilePath } = require('../utils/fi
 const { getMetadata } = require('../utils/metadata');
 const { extractDateFromTags, formatFfmpegDate, restoreFileDates } = require('../utils/date');
 const { formatSize } = require('../utils/size');
+const { scanDvd, convertDvdTitle } = require('../utils/handbrake');
 
 function convertCommand(sourceDirOrFile, outputDir, options = {}) {
     const { dryRun, recursive = true, aspectRatio } = options;
@@ -22,11 +23,39 @@ function convertCommand(sourceDirOrFile, outputDir, options = {}) {
     const srcStat = fs.statSync(src);
     const isFile = srcStat.isFile();
     const baseSrc = isFile ? path.dirname(src) : src;
-    const files = isFile 
-        ? (isVideoFile(src) ? [path.basename(src)] : [])
-        : fs.readdirSync(src, { recursive }).filter(file => isVideoFile(file) && fs.statSync(path.join(src, file)).isFile());
+    
+    let dvdPaths = [];
+    let files = [];
+
+    function scanDirectory(currentPath, relativePath = '') {
+        const filesInDir = fs.readdirSync(currentPath);
+        
+        if (filesInDir.some(f => f.toLowerCase() === 'video_ts' || f.toLowerCase() === 'video_ts.ifo')) {
+            dvdPaths.push(currentPath);
+            return;
+        }
+
+        for (const file of filesInDir) {
+            const fullPath = path.join(currentPath, file);
+            const relPath = path.join(relativePath, file);
+            const stat = fs.statSync(fullPath);
+            
+            if (stat.isDirectory()) {
+                if (recursive) scanDirectory(fullPath, relPath);
+            } else if (stat.isFile() && isVideoFile(file)) {
+                files.push(relPath);
+            }
+        }
+    }
+
+    if (isFile) {
+        if (isVideoFile(src)) files.push(path.basename(src));
+    } else {
+        scanDirectory(src);
+    }
 
     console.log(`Scanning: ${src} (isFile: ${isFile}, recursive: ${recursive})`);
+    console.log(`Found ${files.length} normal video(s) and ${dvdPaths.length} DVD folder(s).`);
 
     let scannedCount = files.length;
     let processedCount = 0;
@@ -154,10 +183,72 @@ function convertCommand(sourceDirOrFile, outputDir, options = {}) {
             console.log(`- Total New Size ${dryRun ? '(estimated)' : ''}: ${formatSize(totalNewBytes)}`);
             console.log(`- Space Saved ${dryRun ? '(estimated)' : ''}: ${formatSize(Math.max(0, savedBytes))} (${savedPercent}%)`);
         }
+    }
+
+    async function handleDvd(dvdPath, outDir, opts) {
+        console.log(`\nDetected DVD structure at: ${dvdPath}`);
+        console.log(`Scanning DVD for titles... This may take a moment.`);
+        
+        try {
+            const titles = await scanDvd(dvdPath);
+            if (titles.length === 0) {
+                console.log(`No valid titles found in DVD: ${dvdPath}`);
+                return;
+            }
+
+            console.log(`Found ${titles.length} titles.`);
+            
+            let convertedDvdCount = 0;
+
+            for (let i = 0; i < titles.length; i++) {
+                const titleInfo = titles[i];
+                // Skip very short titles (often menu loops or warnings), e.g., less than 10 seconds.
+                if (titleInfo.durationSeconds < 10) {
+                    console.log(`[${i + 1}/${titles.length}] Skipping Title ${titleInfo.title} (Duration: ${titleInfo.duration} is too short)`);
+                    continue;
+                }
+
+                const dvdName = path.basename(dvdPath);
+                const outName = `${dvdName}_Title_${titleInfo.title.toString().padStart(2, '0')}.mp4`;
+                const outputFilePath = path.join(outDir, outName);
+                
+                if (fs.existsSync(outputFilePath)) {
+                    console.log(`[${i + 1}/${titles.length}] Skipping (already converted): ${outName}`);
+                    continue;
+                }
+
+                console.log(`[${i + 1}/${titles.length}] Converting Title ${titleInfo.title} (${titleInfo.duration}) -> ${outName}`);
+                
+                await convertDvdTitle(dvdPath, titleInfo.title, outputFilePath, opts.dryRun, (percent) => {
+                    process.stdout.write(`[${i + 1}/${titles.length}] Progress: ${percent.toFixed(1)}% \r`);
+                });
+                
+                if (!opts.dryRun) {
+                    console.log(`[${i + 1}/${titles.length}] Done: ${outName}                    `);
+                }
+                convertedDvdCount++;
+            }
+
+            console.log(`\nDVD Conversion Summary (${dvdPath}):`);
+            console.log(`- Total titles found: ${titles.length}`);
+            console.log(`- Titles converted: ${convertedDvdCount}`);
+
+        } catch (err) {
+            console.error(`Error processing DVD: ${err.message}`);
+        }
+    }
+
+    async function runAll() {
+        if (files.length > 0) {
+            await runBatch();
+        }
+        for (const dvdPath of dvdPaths) {
+            await handleDvd(dvdPath, out, options);
+        }
         console.log('\nAll operations finished.');
     }
 
-    return runBatch();
+    return runAll();
 }
 
 function validate(params) {

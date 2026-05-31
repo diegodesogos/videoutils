@@ -2,6 +2,51 @@
 
 A Node.js CLI utility wrapper around `fluent-ffmpeg` designed to reliably batch convert legacy video codecs (like AVI/MPEG) to modern MP4 (H.264/HEVC) while guaranteeing the absolute preservation of internal EXIF metadata and OS-level file timestamps.
 
+## Prerequisites & Installation
+
+This utility relies on external system-level binaries to perform video transcoding, metadata parsing, and file timestamp preservation.
+
+### 1. System Dependencies
+
+Ensure the following packages are installed on your system and available in your shell's `PATH`:
+- **FFmpeg & FFprobe**: Required for video transcoding, metadata extraction, stream mapping, and container manipulations.
+- **HandBrakeCLI**: Required specifically for processing and converting DVD structures (`VIDEO_TS`).
+- **Xcode Command Line Tools** (macOS only): Required for the `SetFile` utility, which preserves identical file creation (`birthtime`) timestamps.
+
+#### macOS Setup
+Using [Homebrew](https://brew.sh):
+```bash
+# Install FFmpeg and HandBrake CLI
+brew install ffmpeg handbrake-cli
+
+# Install Xcode Command Line Tools (to get 'SetFile')
+xcode-select --install
+```
+
+#### Linux Setup
+On Debian/Ubuntu-based distributions:
+```bash
+# Update packages and install FFmpeg and HandBrake CLI
+sudo apt update
+sudo apt install ffmpeg handbrake-cli
+```
+> [!NOTE]
+> On Linux, the macOS-exclusive `SetFile` utility is not available. The application will automatically fallback to updating access and modification times (`atime` and `mtime`) via standard file system calls, while skipping creation time modification.
+
+### 2. Project Installation
+
+This utility requires **Node.js (v18+)**. 
+
+To set up the repository:
+```bash
+# Clone the repository and navigate to its root directory
+git clone <repository-url>
+cd video_utils
+
+# Install Node dependencies
+npm install
+```
+
 ## Project Architecture
 
 The project adheres to a modular, decoupled architecture, separating the core utility functions from the CLI command handlers.
@@ -30,7 +75,8 @@ The library exposes a single entry point via `src/index.js`.
 
 ### `convert <sourceDirOrFile> <outputDir>`
 Scans the source directory or a single file and transpiles videos. By default, it scans recursively if a directory is provided, but outputs all files to a single flat level in the output directory.
-- Switches to `libx265` (HEVC) for >720p, otherwise `libx264` (AVC).
+- **DVD/VOB Directory Support**: Automatically detects DVD structures (containing `VIDEO_TS` or `VIDEO_TS.IFO`). When a DVD directory is detected, it utilizes `HandBrakeCLI` (required system dependency) to dynamically parse the DVD structure, filter out menu loops (under 10 seconds), and convert individual DVD titles sequentially into independent, optimized `.mp4` files (named `Title_01.mp4`, `Title_02.mp4`, etc.).
+- Switches to `libx265` (HEVC) for >720p, otherwise `libx264` (AVC) for standard video files.
 - Detects legacy audio (like `pcm_u8`) and transpiles to `aac` to prevent MP4 multiplexing failures.
 - Recursively maps stream-level EXIF data (e.g. `DateTime`, `Make`, `Model`) into the output MP4 format metadata.
 - Applies `fs.utimesSync` and macOS `SetFile` to replicate identical OS modification/birth timestamps on the output.
