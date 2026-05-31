@@ -2,24 +2,45 @@ const fs = require('fs');
 const { execSync } = require('child_process');
 
 function extractDateFromFilename(filename) {
-    const regex = /(?:^|[^0-9])((?:19|20)\d{2}[-]?\d{2}[-]?\d{2})(?:[_-](\d{2}[-:]?\d{2}[-:]?\d{2}))?(?=[^0-9]|$)/g;
-    let match;
-    let lastMatch = null;
+    const heuristics = [
+        // Pattern 1: Date and Time separated by _, -, or space
+        {
+            regex: /(?:^|[^0-9])((?:19|20)\d{2}[-]?\d{2}[-]?\d{2})[\s_-](\d{2}[-:]?\d{2}[-:]?\d{2})(?=[^0-9]|$)/g,
+            hasTime: true
+        },
+        // Pattern 2: Date only
+        {
+            regex: /(?:^|[^0-9])((?:19|20)\d{2}[-]?\d{2}[-]?\d{2})(?=[^0-9]|$)/g,
+            hasTime: false
+        }
+    ];
 
-    while ((match = regex.exec(filename)) !== null) {
-        lastMatch = match;
+    let bestMatch = null;
+
+    for (const heuristic of heuristics) {
+        let match;
+        let lastMatch = null;
+        while ((match = heuristic.regex.exec(filename)) !== null) {
+            lastMatch = match;
+        }
+
+        if (lastMatch) {
+            bestMatch = { match: lastMatch, heuristic };
+            break; // Stop at the first (highest priority) matching heuristic
+        }
     }
 
-    if (!lastMatch) return null;
+    if (!bestMatch) return null;
 
-    let dateStr = lastMatch[1].replace(/-/g, '');
-    let timeStr = lastMatch[2] ? lastMatch[2].replace(/[-:]/g, '') : '120000';
+    const { match, heuristic } = bestMatch;
+    let dateStr = match[1].replace(/-/g, '');
+    let timeStr = heuristic.hasTime ? match[2].replace(/[-:]/g, '') : '120000';
 
     const yyyy = dateStr.substring(0, 4);
     const mm = dateStr.substring(4, 6);
     const dd = dateStr.substring(6, 8);
 
-    if (parseInt(mm) > 12 || parseInt(mm) < 1 || parseInt(dd) > 31 || parseInt(dd) < 1) {
+    if (parseInt(mm, 10) > 12 || parseInt(mm, 10) < 1 || parseInt(dd, 10) > 31 || parseInt(dd, 10) < 1) {
         return null;
     }
 
@@ -27,13 +48,22 @@ function extractDateFromFilename(filename) {
     let min = timeStr.substring(2, 4);
     let ss = timeStr.substring(4, 6);
 
-    if (parseInt(hh) > 23 || parseInt(min) > 59 || parseInt(ss) > 59) {
+    if (parseInt(hh, 10) > 23 || parseInt(min, 10) > 59 || parseInt(ss, 10) > 59) {
         hh = '12'; min = '00'; ss = '00';
     }
 
+    const dateObj = new Date(
+        parseInt(yyyy, 10),
+        parseInt(mm, 10) - 1,
+        parseInt(dd, 10),
+        parseInt(hh, 10),
+        parseInt(min, 10),
+        parseInt(ss, 10)
+    );
+
     return {
-        iso: `${yyyy}-${mm}-${dd}T${hh}:${min}:${ss}Z`,
-        dateObj: new Date(`${yyyy}-${mm}-${dd}T${hh}:${min}:${ss}Z`)
+        iso: `${yyyy}-${mm}-${dd}T${hh}:${min}:${ss}`,
+        dateObj: dateObj
     };
 }
 
@@ -49,7 +79,7 @@ function extractDateFromTags(tags, stat) {
 function formatFfmpegDate(creationTime) {
     if (!creationTime) return null;
     if (creationTime.match(/^\d{4}[:\-]\d{2}[:\-]\d{2}\s\d{2}:\d{2}:\d{2}$/)) {
-        return creationTime.replace(/^(\d{4})[:\-](\d{2})[:\-](\d{2})\s(.*)$/, '$1-$2-$3T$4Z');
+        return creationTime.replace(/^(\d{4})[:\-](\d{2})[:\-](\d{2})\s(.*)$/, '$1-$2-$3T$4');
     }
     return creationTime;
 }

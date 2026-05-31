@@ -56,9 +56,11 @@ node src/index.js convert ./test/sourceTest ./test/outputTest --dry-run --no-rec
 
 ### `adjust-exif <targetDirOrFile> [options]`
 Extracts the date and time strings embedded directly within filenames of all videos in a directory or a single file.
-- Utilizes `ffmpeg -c copy` to inject a newly formatted ISO-8601 `creation_time` directly into the container header without re-encoding the stream.
+- Utilizes `ffmpeg -c copy` to inject a newly formatted ISO-8601 `creation_time` (using the system's local timezone instead of UTC) directly into the container header without re-encoding the stream.
 - Re-aligns OS `birthtime` and `mtime` to match.
-- Designed to fallback to the furthest-right date sequence if multiple dates exist in the string.
+- Employs a structured heuristic engine to extract dates. It prioritizes finding a date coupled with a time separated by a dash, underscore, or space (e.g., `2013-01-19 120718- Summer Trip 01.mp4` or `2023-08-15_093000_birthday.mp4`).
+- If no combined date and time is found, it falls back to extracting just the date (e.g., `2020-12-25.mp4`).
+- Designed to fallback to the furthest-right date sequence if multiple matching dates exist in the string.
 
 **Options:**
 - `--compareDate=distinct` (Default): Only adjust files where filename date and metadata date differ. Logs mismatches.
