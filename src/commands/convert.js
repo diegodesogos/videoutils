@@ -107,13 +107,22 @@ function convertCommand(sourceDirOrFile, outputDir, options = {}) {
         });
     }
 
+    function isAlreadyConverted(outputFilePath) {
+        if (fs.existsSync(outputFilePath)) return true;
+        const ext = path.extname(outputFilePath);
+        const base = path.basename(outputFilePath, ext);
+        const dir = path.dirname(outputFilePath);
+        const part01Path = path.join(dir, `${base}_part01${ext}`);
+        return fs.existsSync(part01Path);
+    }
+
     async function convertVideo(file, currentIndex, totalFiles) {
         return new Promise((resolve, reject) => {
             const filePath = path.join(baseSrc, file);
             const outputFilePath = getOutputFilePath(file, out);
             const tempFilePath = getTempFilePath(outputFilePath);
 
-            if (fs.existsSync(outputFilePath)) {
+            if (isAlreadyConverted(outputFilePath)) {
                 console.log(`[${currentIndex}/${totalFiles}] Skipping (already converted): ${file}`);
                 skippedCount++;
                 return resolve();
@@ -266,17 +275,32 @@ function convertCommand(sourceDirOrFile, outputDir, options = {}) {
                 const outName = `${dvdName}_Title_${titleInfo.title.toString().padStart(2, '0')}.mp4`;
                 const outputFilePath = path.join(outDir, outName);
                 
-                if (fs.existsSync(outputFilePath)) {
+                if (isAlreadyConverted(outputFilePath)) {
                     console.log(`[${i + 1}/${titles.length}] Skipping (already converted): ${outName}`);
                     continue;
                 }
 
                 console.log(`[${i + 1}/${titles.length}] Converting Title ${titleInfo.title} (${titleInfo.duration}) -> ${outName}`);
                 
+                let firstProgressReceived = false;
+                let dotsInterval = setInterval(() => {
+                    if (!firstProgressReceived) process.stdout.write('.');
+                }, 1000);
+
                 await convertDvdTitle(dvdPath, titleInfo.title, outputFilePath, opts.dryRun, (percent, eta) => {
+                    if (!firstProgressReceived) {
+                        firstProgressReceived = true;
+                        clearInterval(dotsInterval);
+                        process.stdout.write('\n'); // move to next line for progress bar
+                    }
                     const etaStr = eta ? ` (ETA ${eta})` : '';
                     process.stdout.write(`[${i + 1}/${titles.length}] Progress: ${percent.toFixed(1)}%${etaStr} \r`);
                 });
+                
+                if (!firstProgressReceived) {
+                    clearInterval(dotsInterval);
+                    process.stdout.write('\n');
+                }
                 
                 if (!opts.dryRun) {
                     await splitIfTooBig(outputFilePath, titleInfo.durationSeconds, maxFileSizeMb);
