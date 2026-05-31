@@ -73,14 +73,14 @@ function convertDvdTitle(dvdPath, titleNum, outputFilePath, dryRun = false, onPr
 
         const tempFilePath = getTempFilePath(outputFilePath);
         
-        // Basic parameters: -e x264 -q 20 --preset fast (good quality/speed for typical DVD rips)
+        // Basic parameters: -e x264 -q 20 --encoder-preset fast (good quality/speed for typical DVD rips)
         const args = [
             '-i', dvdPath,
             '-t', titleNum.toString(),
             '-o', tempFilePath,
             '-e', 'x264',
             '-q', '20',
-            '--preset', 'fast',
+            '--encoder-preset', 'fast',
             '-a', '1', // default audio track
             '-E', 'ca_aac' // coreaudio aac encoding (macOS native, very fast/good) or just 'av_aac'
         ];
