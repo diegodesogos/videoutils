@@ -5,7 +5,6 @@ const { isVideoFile, getOutputFilePath, getTempFilePath } = require('../utils/fi
 const { getMetadata } = require('../utils/metadata');
 const { extractDateFromTags, formatFfmpegDate, restoreFileDates } = require('../utils/date');
 const { formatSize } = require('../utils/size');
-const { scanDvd, convertDvdTitle } = require('../utils/handbrake');
 
 function convertCommand(sourceDirOrFile, outputDir, options = {}) {
     const { dryRun, recursive = true, aspectRatio, maxFileSizeMb = 1024 } = options;
@@ -24,14 +23,51 @@ function convertCommand(sourceDirOrFile, outputDir, options = {}) {
     const isFile = srcStat.isFile();
     const baseSrc = isFile ? path.dirname(src) : src;
     
-    let dvdPaths = [];
-    let files = [];
+    let jobs = []; // Stores either string (normal file path relative to baseSrc) or object (DVD pseudo-file)
 
     function scanDirectory(currentPath, relativePath = '') {
         const filesInDir = fs.readdirSync(currentPath);
         
         if (filesInDir.some(f => f.toLowerCase() === 'video_ts' || f.toLowerCase() === 'video_ts.ifo')) {
-            dvdPaths.push(currentPath);
+            // It's a DVD structure. Group VOBs by title.
+            let targetDir = currentPath;
+            const videoTsPath = path.join(currentPath, 'VIDEO_TS');
+            if (fs.existsSync(videoTsPath) && fs.statSync(videoTsPath).isDirectory()) {
+                targetDir = videoTsPath;
+            }
+
+            const dvdFilesInDir = fs.readdirSync(targetDir);
+            const titles = {};
+
+            dvdFilesInDir.forEach(f => {
+                const m = f.match(/^VTS_(\d{2})_([1-9])\.VOB$/i);
+                if (m) {
+                    const t = m[1];
+                    if (!titles[t]) titles[t] = [];
+                    titles[t].push(f);
+                }
+            });
+
+            const titleKeys = Object.keys(titles).sort();
+            if (titleKeys.length === 0) {
+                console.log(`No valid VOB titles found in DVD: ${currentPath}`);
+                return;
+            }
+
+            const dvdName = path.basename(currentPath);
+            titleKeys.forEach(t => {
+                const vobFiles = titles[t].sort();
+                const concatFiles = vobFiles.map(f => path.join(targetDir, f)).join('|');
+                
+                jobs.push({
+                    isDvdConcat: true,
+                    concatString: `concat:${concatFiles}`,
+                    firstVob: path.join(targetDir, vobFiles[0]),
+                    vobFiles: vobFiles,
+                    dvdDir: targetDir,
+                    outName: `${dvdName}_Title_${t}.mp4`
+                });
+            });
             return;
         }
 
@@ -43,22 +79,23 @@ function convertCommand(sourceDirOrFile, outputDir, options = {}) {
             if (stat.isDirectory()) {
                 if (recursive) scanDirectory(fullPath, relPath);
             } else if (stat.isFile() && isVideoFile(file)) {
-                files.push(relPath);
+                jobs.push(relPath);
             }
         }
     }
 
     if (isFile) {
-        if (isVideoFile(src)) files.push(path.basename(src));
+        if (isVideoFile(src)) jobs.push(path.basename(src));
         console.log(`Scanning: ${src} (isFile: true)`);
     } else {
         console.log(`Scanning directory: ${src} (recursive: ${recursive})...`);
         scanDirectory(src);
     }
 
-    console.log(`Found ${files.length} normal video(s) and ${dvdPaths.length} DVD folder(s).`);
+    const normalCount = jobs.filter(j => typeof j === 'string').length;
+    const dvdCount = jobs.filter(j => typeof j === 'object').length;
+    console.log(`Found ${normalCount} normal video(s) and ${dvdCount} DVD title(s).`);
 
-    let scannedCount = files.length;
     let processedCount = 0;
     let convertedCount = 0;
     let skippedCount = 0;
@@ -116,27 +153,50 @@ function convertCommand(sourceDirOrFile, outputDir, options = {}) {
         return fs.existsSync(part01Path);
     }
 
-    async function convertVideo(file, currentIndex, totalFiles) {
+    async function convertJob(job, currentIndex, totalFiles) {
         return new Promise((resolve, reject) => {
-            const filePath = path.join(baseSrc, file);
-            const outputFilePath = getOutputFilePath(file, out);
-            const tempFilePath = getTempFilePath(outputFilePath);
+            let isDvd = false;
+            let filePath, outputFilePath, tempFilePath, displayFileName, concatString, firstVobPath;
+
+            if (typeof job === 'object' && job.isDvdConcat) {
+                isDvd = true;
+                concatString = job.concatString;
+                firstVobPath = job.firstVob;
+                outputFilePath = path.join(out, job.outName);
+                displayFileName = job.outName;
+                tempFilePath = getTempFilePath(outputFilePath);
+            } else {
+                filePath = path.join(baseSrc, job);
+                outputFilePath = getOutputFilePath(job, out);
+                tempFilePath = getTempFilePath(outputFilePath);
+                displayFileName = job;
+            }
 
             if (isAlreadyConverted(outputFilePath)) {
-                console.log(`[${currentIndex}/${totalFiles}] Skipping (already converted): ${file}`);
+                console.log(`[${currentIndex}/${totalFiles}] Skipping (already converted): ${displayFileName}`);
                 skippedCount++;
                 return resolve();
             }
 
             processedCount++;
-            const stat = fs.statSync(filePath);
-            const meta = getMetadata(filePath);
+            
+            let stat, meta, originalSize;
+            if (isDvd) {
+                stat = fs.statSync(firstVobPath);
+                meta = getMetadata(firstVobPath);
+                originalSize = job.vobFiles.reduce((acc, f) => acc + fs.statSync(path.join(job.dvdDir, f)).size, 0);
+            } else {
+                stat = fs.statSync(filePath);
+                meta = getMetadata(filePath);
+                originalSize = stat.size;
+            }
+
             if (!meta) {
-                console.error(`[${currentIndex}/${totalFiles}] Error: Failed to get metadata for ${file}`);
+                console.error(`[${currentIndex}/${totalFiles}] Error: Failed to get metadata for ${displayFileName}`);
                 return resolve();
             }
 
-            totalOriginalBytes += stat.size;
+            totalOriginalBytes += originalSize;
 
             const width = meta.width || 0;
             const height = meta.height || 0;
@@ -150,21 +210,20 @@ function convertCommand(sourceDirOrFile, outputDir, options = {}) {
             }
 
             if (dryRun) {
-                console.log(`[${currentIndex}/${totalFiles}] [DRY RUN] Would convert: ${file} -> ${outputFilePath} (${isHevc ? 'HEVC' : 'AVC'})`);
-                // Theoretical savings: HEVC ~60% reduction, AVC ~40% reduction
+                console.log(`[${currentIndex}/${totalFiles}] [DRY RUN] Would convert: ${displayFileName} -> ${outputFilePath} (${isHevc ? 'HEVC' : 'AVC'})`);
                 const estimatedSavings = isHevc ? 0.6 : 0.4;
-                totalNewBytes += Math.round(stat.size * (1 - estimatedSavings));
+                totalNewBytes += Math.round(originalSize * (1 - estimatedSavings));
                 convertedCount++;
                 return resolve();
             }
 
-            const command = ffmpeg(filePath);
+            const command = ffmpeg(isDvd ? concatString : filePath);
 
             if (isHevc) {
-                console.log(`[${currentIndex}/${totalFiles}] [HEVC] ${file} (${width}x${height})`);
+                console.log(`[${currentIndex}/${totalFiles}] [HEVC] ${displayFileName} (${width}x${height})`);
                 command.videoCodec('libx265').outputOptions(['-crf 23', '-preset medium', '-tag:v hvc1']);
             } else {
-                console.log(`[${currentIndex}/${totalFiles}] [AVC]  ${file} (${width}x${height})`);
+                console.log(`[${currentIndex}/${totalFiles}] [AVC]  ${displayFileName} (${width}x${height})`);
                 command.videoCodec('libx264').outputOptions(['-crf 18', '-preset slow']);
             }
 
@@ -197,7 +256,7 @@ function convertCommand(sourceDirOrFile, outputDir, options = {}) {
             command
                 .format('mp4')
                 .on('error', (err) => {
-                    console.error(`\nError: ${file} - ${err.message}`);
+                    console.error(`\nError: ${displayFileName} - ${err.message}`);
                     if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
                     resolve();
                 })
@@ -213,12 +272,15 @@ function convertCommand(sourceDirOrFile, outputDir, options = {}) {
                     fs.renameSync(tempFilePath, outputFilePath);
                     restoreFileDates(outputFilePath, stat.atime, stat.mtime, stat.birthtime);
                     
-                    const durationSeconds = meta.format && meta.format.duration ? parseFloat(meta.format.duration) : 0;
+                    // Probe the newly created output file to get the exact duration (important for DVD concat)
+                    const newMeta = getMetadata(outputFilePath);
+                    const durationSeconds = newMeta && newMeta.format && newMeta.format.duration ? parseFloat(newMeta.format.duration) : 0;
+                    
                     await splitIfTooBig(outputFilePath, durationSeconds, maxFileSizeMb);
                     
                     const newStat = fs.existsSync(outputFilePath) ? fs.statSync(outputFilePath) : { size: 0 };
-                    totalNewBytes += newStat.size; // This may be 0 if split and original deleted, but size of chunks isn't easily summed here without globbing. For now, it's fine.
-                    console.log(`[${currentIndex}/${totalFiles}] Done: ${file}          `);
+                    totalNewBytes += newStat.size;
+                    console.log(`[${currentIndex}/${totalFiles}] Done: ${displayFileName}          `);
                     convertedCount++;
                     resolve();
                 })
@@ -226,10 +288,15 @@ function convertCommand(sourceDirOrFile, outputDir, options = {}) {
         });
     }
 
-    async function runBatch() {
+    async function runAll() {
+        if (jobs.length === 0) {
+            console.log('\nNo files or DVDs to process.');
+            return;
+        }
+
         let currentIndex = 1;
-        for (const file of files) {
-            await convertVideo(file, currentIndex, scannedCount);
+        for (const job of jobs) {
+            await convertJob(job, currentIndex, jobs.length);
             currentIndex++;
         }
         
@@ -237,93 +304,14 @@ function convertCommand(sourceDirOrFile, outputDir, options = {}) {
         const savedPercent = totalOriginalBytes > 0 ? ((savedBytes / totalOriginalBytes) * 100).toFixed(1) : 0;
 
         console.log(`\nConversion Summary:`);
-        console.log(`- Total files scanned: ${scannedCount}`);
-        console.log(`- Files skipped (already converted): ${skippedCount}`);
-        console.log(`- Files processed (to be converted): ${processedCount}`);
-        console.log(`- Files converted ${dryRun ? '(estimated)' : ''}: ${convertedCount}`);
+        console.log(`- Total jobs scanned: ${jobs.length}`);
+        console.log(`- Jobs skipped (already converted): ${skippedCount}`);
+        console.log(`- Jobs processed (to be converted): ${processedCount}`);
+        console.log(`- Jobs converted ${dryRun ? '(estimated)' : ''}: ${convertedCount}`);
         if (processedCount > 0) {
             console.log(`- Total Original Size: ${formatSize(totalOriginalBytes)}`);
             console.log(`- Total New Size ${dryRun ? '(estimated)' : ''}: ${formatSize(totalNewBytes)}`);
             console.log(`- Space Saved ${dryRun ? '(estimated)' : ''}: ${formatSize(Math.max(0, savedBytes))} (${savedPercent}%)`);
-        }
-    }
-
-    async function handleDvd(dvdPath, outDir, opts) {
-        console.log(`\nDetected DVD structure at: ${dvdPath}`);
-        console.log(`Scanning DVD for titles... This may take a moment.`);
-        
-        try {
-            const titles = await scanDvd(dvdPath);
-            if (titles.length === 0) {
-                console.log(`No valid titles found in DVD: ${dvdPath}`);
-                return;
-            }
-
-            console.log(`Found ${titles.length} titles.`);
-            
-            let convertedDvdCount = 0;
-
-            for (let i = 0; i < titles.length; i++) {
-                const titleInfo = titles[i];
-                // Skip very short titles (often menu loops or warnings), e.g., less than 10 seconds.
-                if (titleInfo.durationSeconds < 10) {
-                    console.log(`[${i + 1}/${titles.length}] Skipping Title ${titleInfo.title} (Duration: ${titleInfo.duration} is too short)`);
-                    continue;
-                }
-
-                const dvdName = path.basename(dvdPath);
-                const outName = `${dvdName}_Title_${titleInfo.title.toString().padStart(2, '0')}.mp4`;
-                const outputFilePath = path.join(outDir, outName);
-                
-                if (isAlreadyConverted(outputFilePath)) {
-                    console.log(`[${i + 1}/${titles.length}] Skipping (already converted): ${outName}`);
-                    continue;
-                }
-
-                console.log(`[${i + 1}/${titles.length}] Converting Title ${titleInfo.title} (${titleInfo.duration}) -> ${outName}`);
-                
-                let firstProgressReceived = false;
-                let dotsInterval = setInterval(() => {
-                    if (!firstProgressReceived) process.stdout.write('.');
-                }, 1000);
-
-                await convertDvdTitle(dvdPath, titleInfo.title, outputFilePath, opts.dryRun, (percent, eta) => {
-                    if (!firstProgressReceived) {
-                        firstProgressReceived = true;
-                        clearInterval(dotsInterval);
-                        process.stdout.write('\n'); // move to next line for progress bar
-                    }
-                    const etaStr = eta ? ` (ETA ${eta})` : '';
-                    process.stdout.write(`[${i + 1}/${titles.length}] Progress: ${percent.toFixed(1)}%${etaStr} \r`);
-                });
-                
-                if (!firstProgressReceived) {
-                    clearInterval(dotsInterval);
-                    process.stdout.write('\n');
-                }
-                
-                if (!opts.dryRun) {
-                    await splitIfTooBig(outputFilePath, titleInfo.durationSeconds, maxFileSizeMb);
-                    console.log(`[${i + 1}/${titles.length}] Done: ${outName}                    `);
-                }
-                convertedDvdCount++;
-            }
-
-            console.log(`\nDVD Conversion Summary (${dvdPath}):`);
-            console.log(`- Total titles found: ${titles.length}`);
-            console.log(`- Titles converted: ${convertedDvdCount}`);
-
-        } catch (err) {
-            console.error(`Error processing DVD: ${err.message}`);
-        }
-    }
-
-    async function runAll() {
-        if (files.length > 0) {
-            await runBatch();
-        }
-        for (const dvdPath of dvdPaths) {
-            await handleDvd(dvdPath, out, options);
         }
         console.log('\nAll operations finished.');
     }
