@@ -219,19 +219,27 @@ function convertCommand(sourceDirOrFile, outputDir, options = {}) {
 
             const command = ffmpeg(isDvd ? concatString : filePath);
 
+            if (isDvd) {
+                command.inputOptions(['-fflags', '+genpts']);
+            }
+
             if (isHevc) {
                 console.log(`[${currentIndex}/${totalFiles}] [HEVC] ${displayFileName} (${width}x${height})`);
                 command.videoCodec('libx265').outputOptions(['-crf 23', '-preset medium', '-tag:v hvc1']);
             } else {
                 console.log(`[${currentIndex}/${totalFiles}] [AVC]  ${displayFileName} (${width}x${height})`);
-                command.videoCodec('libx264').outputOptions(['-crf 18', '-preset slow']);
+                if (isDvd) {
+                    command.videoCodec('libx264').outputOptions(['-crf 23', '-preset slow', '-vf', 'yadif']);
+                } else {
+                    command.videoCodec('libx264').outputOptions(['-crf 18', '-preset slow']);
+                }
             }
 
             const audioStream = meta.rawStreams.find(s => s.codec_type === 'audio');
             if (audioStream) {
                 const codec = audioStream.codec_name;
                 const compatibleCodecs = ['aac', 'mp3', 'ac3', 'eac3', 'alac'];
-                if (compatibleCodecs.includes(codec)) {
+                if (!isDvd && compatibleCodecs.includes(codec)) {
                     command.audioCodec('copy');
                 } else {
                     command.audioCodec('aac').audioBitrate('128k');
@@ -240,7 +248,17 @@ function convertCommand(sourceDirOrFile, outputDir, options = {}) {
                 command.noAudio();
             }
 
-            const metadataOptions = ['-map_metadata', '0', '-movflags', 'use_metadata_tags'];
+            const metadataOptions = [
+                '-map_metadata', '0', 
+                '-movflags', 'use_metadata_tags',
+                '-map', '0:v:0',
+                '-sn'
+            ];
+            
+            if (audioStream) {
+                metadataOptions.push('-map', '0:a:0?');
+            }
+
             let creationTime = extractDateFromTags(meta.tags, stat);
             if (creationTime) {
                 creationTime = formatFfmpegDate(creationTime);
@@ -254,6 +272,7 @@ function convertCommand(sourceDirOrFile, outputDir, options = {}) {
             command.outputOptions(metadataOptions);
 
             command
+                .on('start', (cmdLine) => console.log(`\nFFmpeg Command: ${cmdLine}\n`))
                 .format('mp4')
                 .on('error', (err) => {
                     console.error(`\nError: ${displayFileName} - ${err.message}`);
